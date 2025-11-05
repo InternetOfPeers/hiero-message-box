@@ -20,7 +20,7 @@ async function main() {
             console.log(`📥`, message);
           });
           return new Promise((resolve) => setTimeout(resolve, 3000));
-        }
+        },
       );
     }
   } catch (error) {

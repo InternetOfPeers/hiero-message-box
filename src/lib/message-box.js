@@ -1,13 +1,15 @@
 const fs = require("fs");
 const path = require("path");
-const https = require("https");
 const crypto = require("crypto");
 const {
   getAccountMemo,
   updateAccountMemo,
   createTopic,
   submitMessageToHCS,
-  getMirrorNodeUrl,
+  getLatestSequenceNumber,
+  getNewMessages,
+  getFirstTopicMessage,
+  getMessagesInRange,
 } = require("./hedera");
 const { encryptMessage, decryptMessage } = require("./common");
 
@@ -31,19 +33,19 @@ async function setupMessageBox(client, dataDir, accountId) {
   messageBoxId = extractMessageBoxIdFromMemo(accountMemo);
   if (messageBoxId) {
     console.debug(
-      `✓ Found existing message box ${messageBoxId} for account ${accountId}`
+      `✓ Found existing message box ${messageBoxId} for account ${accountId}`,
     );
     const status = await checkMessageBoxStatus(messageBoxId);
     if (status.exists && status.hasPublicKey) {
       // Message box exists and has a public key. Checking if keys match...
       const keysMatch = await verifyKeyPairMatchesTopic(
         messageBoxId,
-        privateKey
+        privateKey,
       );
       // If keys does not match, warn the user and ask if they want to create a new message box anyway
       if (!keysMatch) {
         console.warn(
-          `\n⚠ WARNING: Your keys cannot decrypt messages for message box ${messageBoxId}!`
+          `\n⚠ WARNING: Your keys cannot decrypt messages for message box ${messageBoxId}!`,
         );
         const readline = require("readline").createInterface({
           input: process.stdin,
@@ -57,13 +59,13 @@ async function setupMessageBox(client, dataDir, accountId) {
         });
         if (!(answer === "yes" || answer === "y")) {
           console.log(
-            "\n✗ Messages in the message box cannot be decrypted. Exiting."
+            "\n✗ Messages in the message box cannot be decrypted. Exiting.",
           );
           process.exit(1);
         }
       } else {
         console.log(
-          `✓ Existing message box ${messageBoxId} is valid and keys match.`
+          `✓ Existing message box ${messageBoxId} is valid and keys match.`,
         );
         needsNewMessageBox = false;
       }
@@ -73,7 +75,7 @@ async function setupMessageBox(client, dataDir, accountId) {
   if (needsNewMessageBox) {
     result = await createTopic(
       client,
-      `[HIP-9999:${client.operatorAccountId}] ${client.operatorAccountId} listens here for HIP-9999 encrypted messages.`
+      `[HIP-9999:${client.operatorAccountId}] ${client.operatorAccountId} listens here for HIP-9999 encrypted messages.`,
     );
     if (!result.success) {
       throw new Error(`Failed to create new message box: ${result.error}`);
@@ -83,15 +85,15 @@ async function setupMessageBox(client, dataDir, accountId) {
     await updateAccountMemo(
       client,
       accountId,
-      `[HIP-9999:${messageBoxId}] If you want to contact me, send HIP-9999 encrypted messages to ${messageBoxId}.`
+      `[HIP-9999:${messageBoxId}] If you want to contact me, send HIP-9999 encrypted messages to ${messageBoxId}.`,
     );
     console.log(
-      `✓ Message box ${messageBoxId} set up correctly for account ${accountId}`
+      `✓ Message box ${messageBoxId} set up correctly for account ${accountId}`,
     );
     return { success: true, messageBoxId: messageBoxId };
   } else {
     console.log(
-      `✓ Message box ${messageBoxId} already set up correctly for account ${accountId}`
+      `✓ Message box ${messageBoxId} already set up correctly for account ${accountId}`,
     );
     return { success: true, messageBoxId: messageBoxId };
   }
@@ -144,7 +146,7 @@ async function sendMessage(client, recipientAccountId, message) {
     let result = await submitMessageToHCS(
       client,
       messageBoxId,
-      JSON.stringify({ type: "ENCRYPTED_MESSAGE", data: encryptedPayload })
+      JSON.stringify({ type: "ENCRYPTED_MESSAGE", data: encryptedPayload }),
     );
     if (!result.success) {
       throw new Error(`Failed to send message: ${result.error}`);
@@ -152,7 +154,7 @@ async function sendMessage(client, recipientAccountId, message) {
     console.log(`✓ Encrypted message sent correctly.`);
   } else {
     throw new Error(
-      `Message box ID not found for account ${recipientAccountId}`
+      `Message box ID not found for account ${recipientAccountId}`,
     );
   }
 }
@@ -177,7 +179,7 @@ async function pollMessages(client, dataDir, accountId) {
     if (messageBoxId) {
       pollingCache.messageBoxId = messageBoxId;
       console.log(
-        `✓ Found message box ${messageBoxId} for account ${accountId}`
+        `✓ Found message box ${messageBoxId} for account ${accountId}`,
       );
     } else {
       throw new Error(`Message box ID not found for account ${accountId}`);
@@ -187,7 +189,7 @@ async function pollMessages(client, dataDir, accountId) {
       true,
       pollingCache.messageBoxId,
       pollingCache.privateKey,
-      pollingCache
+      pollingCache,
     );
   }
 
@@ -195,8 +197,82 @@ async function pollMessages(client, dataDir, accountId) {
     false,
     pollingCache.messageBoxId,
     pollingCache.privateKey,
-    pollingCache
+    pollingCache,
   );
+}
+
+/**
+ * Check messages in a range for the account's message box.
+ * @param {import("@hashgraph/sdk").Client} client
+ * @param {string} dataDir
+ * @param {string} accountId
+ * @param {number} startSequence - Starting sequence number (inclusive)
+ * @param {number} [endSequence] - Ending sequence number (inclusive), if not provided gets all messages from start
+ * @returns {Promise<string[]>}
+ */
+async function checkMessages(
+  client,
+  dataDir,
+  accountId,
+  startSequence,
+  endSequence,
+) {
+  const { privateKey } = loadOrGenerateRSAKeyPair(dataDir);
+
+  const accountMemo = await getAccountMemo(client, accountId);
+  console.debug(`✓ Current account memo: "${accountMemo}"`);
+
+  const messageBoxId = extractMessageBoxIdFromMemo(accountMemo);
+  if (!messageBoxId) {
+    throw new Error(`Message box ID not found for account ${accountId}`);
+  }
+
+  console.log(`✓ Found message box ${messageBoxId} for account ${accountId}`);
+
+  const endMsg = endSequence ? ` to ${endSequence}` : " onwards";
+  console.log(
+    `⚙ Fetching messages from sequence ${startSequence}${endMsg}...\n`,
+  );
+
+  const rawMessages = await getMessagesInRange(
+    messageBoxId,
+    startSequence,
+    endSequence,
+  );
+  const messages = [];
+
+  rawMessages.forEach((msg) => {
+    const content = Buffer.from(msg.message, "base64").toString("utf8");
+    const timestamp = new Date(
+      parseFloat(msg.consensus_timestamp) * 1000,
+    ).toISOString();
+
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed.type === "ENCRYPTED_MESSAGE") {
+        try {
+          const decrypted = decryptMessage(parsed.data, privateKey);
+          messages.push(
+            `[Seq: ${msg.sequence_number}] [${timestamp}] Encrypted message: ${decrypted}`,
+          );
+        } catch (error) {
+          messages.push(
+            `[Seq: ${msg.sequence_number}] [${timestamp}] Encrypted message (cannot decrypt): ${error.message}`,
+          );
+        }
+      } else if (parsed.type === "PUBLIC_KEY") {
+        messages.push(
+          `[Seq: ${msg.sequence_number}] [${timestamp}] Public key published`,
+        );
+      }
+    } catch {
+      messages.push(
+        `[Seq: ${msg.sequence_number}] [${timestamp}] Plain text message: ${content}`,
+      );
+    }
+  });
+
+  return messages;
 }
 
 // == Private state & functions ================================================
@@ -212,76 +288,48 @@ let pollingCache = { firstCall: true, lastSequenceNumber: 0 };
  * @returns {Promise<string[]>}
  */
 async function listenForMessages(isFirstPoll, topicId, privateKey, cache) {
-  const url = isFirstPoll
-    ? `${getMirrorNodeUrl()}/api/v1/topics/${topicId}/messages?order=desc&limit=1`
-    : `${getMirrorNodeUrl()}/api/v1/topics/${topicId}/messages?sequencenumber=gt:${cache.lastSequenceNumber}&order=asc&limit=100`;
+  try {
+    if (isFirstPoll) {
+      const latestSeq = await getLatestSequenceNumber(topicId);
+      if (latestSeq) {
+        cache.lastSequenceNumber = latestSeq;
+        console.log(`✓ Starting from sequence: ${cache.lastSequenceNumber}\n`);
+      }
+      return []; // Return empty array on first poll
+    }
 
-  return new Promise((resolve, reject) => {
-    https
-      .get(url, (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
+    const newMessages = await getNewMessages(topicId, cache.lastSequenceNumber);
+    const messages = [];
+
+    newMessages.forEach((msg) => {
+      const content = Buffer.from(msg.message, "base64").toString("utf8");
+      const timestamp = new Date(
+        parseFloat(msg.consensus_timestamp) * 1000,
+      ).toISOString();
+
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed.type === "ENCRYPTED_MESSAGE") {
           try {
-            const response = JSON.parse(data);
-            const messages = [];
-
-            if (response.messages?.length > 0) {
-              if (isFirstPoll) {
-                cache.lastSequenceNumber = response.messages[0].sequence_number;
-                console.log(
-                  `✓ Starting from sequence: ${cache.lastSequenceNumber}\n`
-                );
-                resolve(messages); // Return empty array on first poll
-              } else {
-                response.messages.forEach((msg) => {
-                  const content = Buffer.from(msg.message, "base64").toString(
-                    "utf8"
-                  );
-                  const timestamp = new Date(
-                    parseFloat(msg.consensus_timestamp) * 1000
-                  ).toISOString();
-
-                  try {
-                    const parsed = JSON.parse(content);
-                    if (parsed.type === "ENCRYPTED_MESSAGE") {
-                      try {
-                        const decrypted = decryptMessage(
-                          parsed.data,
-                          privateKey
-                        );
-                        messages.push(
-                          `[${timestamp}] Encrypted message: ${decrypted}`
-                        );
-                      } catch (error) {
-                        messages.push(
-                          `[${timestamp}] Encrypted message (cannot decrypt): ${error.message}`
-                        );
-                      }
-                    }
-                  } catch {
-                    messages.push(
-                      `[${timestamp}] Plain text message: ${content}`
-                    );
-                  }
-                  cache.lastSequenceNumber = msg.sequence_number;
-                });
-                resolve(messages);
-              }
-            } else {
-              resolve(messages); // Return empty array if no messages
-            }
+            const decrypted = decryptMessage(parsed.data, privateKey);
+            messages.push(`[${timestamp}] Encrypted message: ${decrypted}`);
           } catch (error) {
-            console.error("Error polling:", error.message);
-            resolve([]); // Return empty array on error
+            messages.push(
+              `[${timestamp}] Encrypted message (cannot decrypt): ${error.message}`,
+            );
           }
-        });
-      })
-      .on("error", (error) => {
-        console.error("Mirror Node error:", error.message);
-        resolve([]); // Return empty array on error
-      });
-  });
+        }
+      } catch {
+        messages.push(`[${timestamp}] Plain text message: ${content}`);
+      }
+      cache.lastSequenceNumber = msg.sequence_number;
+    });
+
+    return messages;
+  } catch (error) {
+    console.error("Error polling:", error.message);
+    return []; // Return empty array on error
+  }
 }
 
 /**
@@ -294,7 +342,7 @@ async function publishPublicKey(client, messageBoxId, publicKey) {
   await submitMessageToHCS(
     client,
     messageBoxId,
-    JSON.stringify({ type: "PUBLIC_KEY", publicKey: publicKey })
+    JSON.stringify({ type: "PUBLIC_KEY", publicKey: publicKey }),
   );
   console.log("✓ Public key published");
 }
@@ -305,42 +353,28 @@ async function publishPublicKey(client, messageBoxId, publicKey) {
  * @returns {Promise<{exists: boolean, hasPublicKey: boolean}>}
  */
 async function checkMessageBoxStatus(messageBoxId) {
-  return new Promise((resolve) => {
-    https
-      .get(
-        `${getMirrorNodeUrl()}/api/v1/topics/${messageBoxId}/messages?limit=1&order=asc`,
-        (res) => {
-          let data = "";
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", () => {
-            try {
-              const response = JSON.parse(data);
-              if (response.messages?.[0]) {
-                const content = Buffer.from(
-                  response.messages[0].message,
-                  "base64"
-                ).toString("utf8");
-                try {
-                  const parsed = JSON.parse(content);
-                  resolve({
-                    exists: true,
-                    hasPublicKey:
-                      parsed.type === "PUBLIC_KEY" && parsed.publicKey,
-                  });
-                } catch {
-                  resolve({ exists: true, hasPublicKey: false });
-                }
-              } else {
-                resolve({ exists: true, hasPublicKey: false });
-              }
-            } catch {
-              resolve({ exists: false, hasPublicKey: false });
-            }
-          });
-        }
-      )
-      .on("error", () => resolve({ exists: false, hasPublicKey: false }));
-  });
+  try {
+    const firstMessage = await getFirstTopicMessage(messageBoxId);
+
+    if (firstMessage) {
+      const content = Buffer.from(firstMessage.message, "base64").toString(
+        "utf8",
+      );
+      try {
+        const parsed = JSON.parse(content);
+        return {
+          exists: true,
+          hasPublicKey: parsed.type === "PUBLIC_KEY" && parsed.publicKey,
+        };
+      } catch {
+        return { exists: true, hasPublicKey: false };
+      }
+    } else {
+      return { exists: true, hasPublicKey: false };
+    }
+  } catch {
+    return { exists: false, hasPublicKey: false };
+  }
 }
 
 /**
@@ -349,57 +383,28 @@ async function checkMessageBoxStatus(messageBoxId) {
  * @returns {Promise<string>} Public key
  */
 async function getPublicKeyFromTopic(topicId) {
-  // Use Hedera Mirror Node REST API
-  const mirrorNodeBaseUrl = getMirrorNodeUrl();
-  const mirrorNodeUrl = `${mirrorNodeBaseUrl}/api/v1/topics/${topicId}/messages/1`;
+  try {
+    const response = await getFirstTopicMessage(topicId);
 
-  return new Promise((resolve, reject) => {
-    const https = require("https");
+    if (response.message) {
+      // Decode the base64 message
+      const messageContent = Buffer.from(response.message, "base64").toString(
+        "utf8",
+      );
+      const parsed = JSON.parse(messageContent);
 
-    https
-      .get(mirrorNodeUrl, (res) => {
-        let data = "";
-
-        res.on("data", (chunk) => {
-          data += chunk;
-        });
-
-        res.on("end", () => {
-          try {
-            const response = JSON.parse(data);
-
-            if (response.message) {
-              // Decode the base64 message
-              const messageContent = Buffer.from(
-                response.message,
-                "base64"
-              ).toString("utf8");
-              const parsed = JSON.parse(messageContent);
-
-              if (parsed.type === "PUBLIC_KEY" && parsed.publicKey) {
-                console.log("✓ Public key retrieved from topic");
-                resolve(parsed.publicKey);
-              } else {
-                reject(
-                  new Error("First message does not contain a public key")
-                );
-              }
-            } else {
-              reject(new Error("No messages found in topic"));
-            }
-          } catch (error) {
-            reject(
-              new Error(
-                `Failed to parse mirror node response: ${error.message}`
-              )
-            );
-          }
-        });
-      })
-      .on("error", (error) => {
-        reject(new Error(`Failed to fetch from mirror node: ${error.message}`));
-      });
-  });
+      if (parsed.type === "PUBLIC_KEY" && parsed.publicKey) {
+        console.log("✓ Public key retrieved from topic");
+        return parsed.publicKey;
+      } else {
+        throw new Error("First message does not contain a public key");
+      }
+    } else {
+      throw new Error("No messages found in topic");
+    }
+  } catch (error) {
+    throw new Error(`Failed to get public key from topic: ${error.message}`);
+  }
 }
 
 /**
@@ -506,4 +511,5 @@ module.exports = {
   removeMessageBox,
   sendMessage,
   pollMessages,
+  checkMessages,
 };

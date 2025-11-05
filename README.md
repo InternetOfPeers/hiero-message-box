@@ -16,6 +16,13 @@ Users can listen for new messages in real-time using this command:
 npm run listen-for-new-messages
 ```
 
+Users can also check for historical messages using this command:
+
+```bash
+npm run check-messages [start-sequence] [end-sequence]
+```
+
+
 When setting up for the first time, the program will:
 
 - Generate RSA key pairs for encryption/decryption
@@ -117,6 +124,42 @@ The listener will:
 - Track the last sequence number to avoid duplicate messages
 
 Press `Ctrl+C` to stop listening.
+
+### Check Messages (Read Message History)
+
+Retrieve and read messages from your message box in a specific range:
+
+```bash
+npm run check-messages [start-sequence] [end-sequence]
+```
+
+**Examples:**
+
+```bash
+# Get all messages from sequence 2 onwards (default)
+npm run check-messages
+
+# Get all messages from sequence 5 onwards
+npm run check-messages 5
+
+# Get messages from sequence 5 to 10 (inclusive)
+npm run check-messages 5 10
+```
+
+The script will:
+
+- Load your RSA keys from `data/` folder
+- Extract the message box topic ID from your account memo
+- Fetch all messages in the specified sequence range
+- Decrypt encrypted messages and display them with sequence numbers and timestamps
+- Show public key messages and plain text messages
+
+This is useful for:
+
+- Reading message history without waiting for new messages
+- Checking specific messages by sequence number
+- Auditing all messages in your message box
+- Retrieving messages you may have missed
 
 ### Send Encrypted Messages (Sender)
 
@@ -389,12 +432,13 @@ This allows the listener to:
 ## Available NPM Scripts
 
 ```bash
-npm start                      # Setup message box + start listening
-npm run setup-message-box      # Setup/verify message box configuration
-npm run listen-for-new-messages # Start polling for new messages
-npm run send-message <id> <msg> # Send encrypted message to account
-npm run remove-message-box     # Remove message box (clear account memo)
-npm run format                 # Format code with Prettier
+npm start                          # Setup message box + start listening
+npm run setup-message-box          # Setup/verify message box configuration
+npm run listen-for-new-messages    # Start polling for new messages
+npm run check-messages [start] [end] # Read message history (defaults to all messages)
+npm run send-message <id> <msg>    # Send encrypted message to account
+npm run remove-message-box         # Remove message box (clear account memo)
+npm run format                     # Format code with Prettier
 ```
 
 ## Configuration Files
