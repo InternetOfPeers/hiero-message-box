@@ -1,6 +1,6 @@
-const { initializeClient } = require("./lib/hedera");
-const { loadEnvFile } = require("./lib/common");
-const { checkMessages } = require("./lib/message-box");
+const { initializeClient } = require('./lib/hedera');
+const { loadEnvFile } = require('./lib/common');
+const { checkMessages } = require('./lib/message-box');
 
 let client = null;
 
@@ -17,19 +17,19 @@ async function main() {
     const endSequence = args[1] ? parseInt(args[1]) : undefined;
 
     if (isNaN(startSequence) || startSequence < 1) {
-      console.error("\n✗ Error: Start sequence must be a positive number");
+      console.error('\n✗ Error: Start sequence must be a positive number');
       console.error(
-        "✓ Usage: node check-messages.js [start-sequence] [end-sequence]",
+        '✓ Usage: node check-messages.js [start-sequence] [end-sequence]'
       );
-      console.error("✓ Examples:");
+      console.error('✓ Examples:');
       console.error(
-        "  node check-messages.js              # Get all messages from sequence 2 onwards",
-      );
-      console.error(
-        "  node check-messages.js 5            # Get all messages from sequence 5",
+        '  node check-messages.js              # Get all messages from sequence 2 onwards'
       );
       console.error(
-        "  node check-messages.js 5 10         # Get messages from sequence 5 to 10\n",
+        '  node check-messages.js 5            # Get all messages from sequence 5'
+      );
+      console.error(
+        '  node check-messages.js 5 10         # Get messages from sequence 5 to 10\n'
       );
       process.exit(1);
     }
@@ -39,7 +39,7 @@ async function main() {
       (isNaN(endSequence) || endSequence < startSequence)
     ) {
       console.error(
-        "\n✗ Error: End sequence must be a number >= start sequence",
+        '\n✗ Error: End sequence must be a number >= start sequence'
       );
       process.exit(1);
     }
@@ -52,14 +52,14 @@ async function main() {
       process.env.DATA_DIR,
       accountId,
       startSequence,
-      endSequence,
+      endSequence
     );
 
     if (messages.length === 0) {
-      console.log("✓ No messages found in the specified range\n");
+      console.log('✓ No messages found in the specified range\n');
     } else {
       console.log(`✓ Found ${messages.length} message(s):\n`);
-      messages.forEach((message) => {
+      messages.forEach(message => {
         console.log(`📩 ${message}`);
       });
       console.log();
@@ -68,15 +68,15 @@ async function main() {
     client.close();
     process.exit(0);
   } catch (error) {
-    console.error("\n✗ Error:", error.message);
+    console.error('\n✗ Error:', error.message);
     if (client) client.close();
     process.exit(1);
   }
 }
 
 // Handle Ctrl+C gracefully
-process.on("SIGINT", () => {
-  console.log("\n\n⚙ Shutting down...");
+process.on('SIGINT', () => {
+  console.log('\n\n⚙ Shutting down...');
   if (client) client.close();
   process.exit(0);
 });

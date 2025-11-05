@@ -39,8 +39,9 @@ To avoid spam, users can decide to set a paid topic as their message box.
 - **Mirror Node API**: Uses Hedera Mirror Node for reliable message polling and topic verification
 - **Real-time Listening**: Continuously polls for new encrypted messages every 3 seconds
 - **Message Formats**: Supports both JSON and CBOR encoding formats for flexibility
+- **Chunked Messages**: Automatically handles messages larger than 1KB split across multiple chunks by HCS
 - **Modular Architecture**: Common functions extracted for reusability and maintainability
-- **Minimal External Dependencies**: Uses only Hashgraph SDK v2.76.0 and native Node.js functions
+- **Zero External Dependencies**: Uses only Hashgraph SDK v2.76.0 and native Node.js functions
 
 ## Prerequisites
 
@@ -195,12 +196,28 @@ The application supports two message encoding formats:
    - Best for: Text messages, debugging, maximum compatibility
 
 2. **CBOR (optional)**: Concise Binary Object Representation
-   - Pros: Compact binary format, ~30-40% smaller payload size
+   - Pros: Compact binary format, 3-5% smaller payload size
    - Cons: Not human-readable in raw form
-   - Best for: Large messages, high-volume messaging, efficient storage
+   - Best for: High-volume messaging, reduced storage costs
    - Specification: [RFC 8949](https://datatracker.ietf.org/doc/html/rfc8949)
 
 Both formats are automatically detected and decoded when reading messages.
+
+**Size Comparison (encrypted messages):**
+
+For a typical encrypted message "Hello, this is a secret message":
+
+- JSON: 510 bytes
+- CBOR: 491 bytes
+- **Savings: ~20 bytes (3-5% reduction)**
+
+CBOR savings come from:
+
+- More efficient encoding of field names (binary indices vs strings)
+- No JSON syntax overhead (quotes, colons, commas)
+- Reduced structural metadata
+
+The savings are relatively constant (~20 bytes per message) regardless of message length, as CBOR primarily optimizes the message structure rather than the encrypted content. This makes CBOR most beneficial for high-volume scenarios where cumulative savings matter.
 
 #### How it works
 
@@ -213,6 +230,17 @@ Both formats are automatically detected and decoded when reading messages.
 7. Sends the encoded payload to the topic with type `ENCRYPTED_MESSAGE`
 
 The recipient will automatically detect the format, decrypt, and display the message when polling.
+
+#### Large Messages and Chunking
+
+The Hedera Consensus Service (HCS) automatically splits messages larger than **1KB** into multiple chunks. This application **transparently handles chunked messages**:
+
+- **Automatic Reassembly**: Messages split across multiple chunks are automatically reassembled before decryption
+- **No Size Limit**: Send messages of any size - the system handles chunking transparently
+- **Chunk Detection**: Uses `chunk_info` metadata from Mirror Node API to identify and group related chunks
+- **Sequential Processing**: Chunks are reassembled in order using `initial_transaction_id` as the grouping key
+
+**Example**: A 2KB message will be split into 2-3 chunks by HCS, but you'll receive it as a single decrypted message.
 
 ### Remove Message Box
 

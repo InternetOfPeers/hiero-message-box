@@ -1,6 +1,6 @@
-const crypto = require("crypto");
-const fs = require("fs");
-const path = require("path");
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 // == Public functions ========================================================
 
@@ -9,32 +9,32 @@ const path = require("path");
  */
 function loadEnvFile() {
   const PROJECT_ROOT = findProjectRoot();
-  const ENV_FILE = path.join(PROJECT_ROOT, ".env");
+  const ENV_FILE = path.join(PROJECT_ROOT, '.env');
 
   if (!fs.existsSync(ENV_FILE)) {
-    console.debug(".env file not found.");
+    console.debug('.env file not found.');
     if (!process.env.DATA_DIR)
-      process.env.DATA_DIR = path.join(PROJECT_ROOT, "data");
+      process.env.DATA_DIR = path.join(PROJECT_ROOT, 'data');
     if (!process.env.PRIVATE_KEY_FILE)
-      process.env.PRIVATE_KEY_FILE = path.join(DATA_DIR, "rsa_private.pem");
+      process.env.PRIVATE_KEY_FILE = path.join(DATA_DIR, 'rsa_private.pem');
     if (!process.env.PUBLIC_KEY_FILE)
-      process.env.PUBLIC_KEY_FILE = path.join(DATA_DIR, "rsa_public.pem");
+      process.env.PUBLIC_KEY_FILE = path.join(DATA_DIR, 'rsa_public.pem');
     return;
   }
 
   try {
-    const envContent = fs.readFileSync(ENV_FILE, "utf8");
-    const lines = envContent.split("\n");
+    const envContent = fs.readFileSync(ENV_FILE, 'utf8');
+    const lines = envContent.split('\n');
 
     for (const line of lines) {
       // Skip empty lines and comments
       const trimmedLine = line.trim();
-      if (!trimmedLine || trimmedLine.startsWith("#")) {
+      if (!trimmedLine || trimmedLine.startsWith('#')) {
         continue;
       }
 
       // Parse KEY=VALUE format
-      const separatorIndex = trimmedLine.indexOf("=");
+      const separatorIndex = trimmedLine.indexOf('=');
       if (separatorIndex !== -1) {
         const key = trimmedLine.substring(0, separatorIndex).trim();
         let value = trimmedLine.substring(separatorIndex + 1).trim();
@@ -54,9 +54,9 @@ function loadEnvFile() {
       }
     }
 
-    console.debug("✓ Environment variables loaded from .env file");
+    console.debug('✓ Environment variables loaded from .env file');
   } catch (error) {
-    console.error("✗ Error loading .env file:", error.message);
+    console.error('✗ Error loading .env file:', error.message);
   }
 }
 
@@ -73,24 +73,24 @@ function encryptMessage(message, publicKeyPem) {
     const iv = crypto.randomBytes(16); // 128 bits IV for AES
 
     // Encrypt the message with AES
-    const cipher = crypto.createCipheriv("aes-256-cbc", aesKey, iv);
-    let encryptedMessage = cipher.update(message, "utf8", "base64");
-    encryptedMessage += cipher.final("base64");
+    const cipher = crypto.createCipheriv('aes-256-cbc', aesKey, iv);
+    let encryptedMessage = cipher.update(message, 'utf8', 'base64');
+    encryptedMessage += cipher.final('base64');
 
     // Encrypt the AES key with RSA public key
     const encryptedAesKey = crypto.publicEncrypt(
       {
         key: publicKeyPem,
         padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-        oaepHash: "sha256",
+        oaepHash: 'sha256',
       },
-      aesKey,
+      aesKey
     );
 
     // Return encrypted data as JSON
     return {
-      encryptedKey: encryptedAesKey.toString("base64"),
-      iv: iv.toString("base64"),
+      encryptedKey: encryptedAesKey.toString('base64'),
+      iv: iv.toString('base64'),
       encryptedData: encryptedMessage,
     };
   } catch (error) {
@@ -104,32 +104,32 @@ function encryptMessage(message, publicKeyPem) {
 function decryptMessage(encryptedData, privateKey) {
   // Check if it's hybrid encryption (AES + RSA)
   if (
-    typeof encryptedData === "object" &&
+    typeof encryptedData === 'object' &&
     encryptedData.encryptedKey &&
     encryptedData.encryptedData
   ) {
     try {
       // Hybrid encryption: Decrypt AES key with RSA, then decrypt message with AES
       // Decrypt the AES key
-      const encryptedAesKey = Buffer.from(encryptedData.encryptedKey, "base64");
+      const encryptedAesKey = Buffer.from(encryptedData.encryptedKey, 'base64');
       const aesKey = crypto.privateDecrypt(
         {
           key: privateKey,
           padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-          oaepHash: "sha256",
+          oaepHash: 'sha256',
         },
-        encryptedAesKey,
+        encryptedAesKey
       );
 
       // Decrypt the message with AES
-      const iv = Buffer.from(encryptedData.iv, "base64");
-      const decipher = crypto.createDecipheriv("aes-256-cbc", aesKey, iv);
+      const iv = Buffer.from(encryptedData.iv, 'base64');
+      const decipher = crypto.createDecipheriv('aes-256-cbc', aesKey, iv);
       let decrypted = decipher.update(
         encryptedData.encryptedData,
-        "base64",
-        "utf8",
+        'base64',
+        'utf8'
       );
-      decrypted += decipher.final("utf8");
+      decrypted += decipher.final('utf8');
 
       return decrypted;
     } catch (error) {
@@ -137,7 +137,7 @@ function decryptMessage(encryptedData, privateKey) {
     }
   } else {
     // Error: Unsupported encryption format
-    throw new Error("Unsupported encryption format");
+    throw new Error('Unsupported encryption format');
   }
 }
 
@@ -157,10 +157,10 @@ function encodeCBOR(data) {
     } else if (value === undefined) {
       // undefined -> major type 7, value 23
       buffers.push(Buffer.from([0xf7]));
-    } else if (typeof value === "boolean") {
+    } else if (typeof value === 'boolean') {
       // false -> 0xf4, true -> 0xf5
       buffers.push(Buffer.from([value ? 0xf5 : 0xf4]));
-    } else if (typeof value === "number") {
+    } else if (typeof value === 'number') {
       if (Number.isInteger(value) && value >= 0 && value < 24) {
         // Small positive integer (0-23)
         buffers.push(Buffer.from([value]));
@@ -189,9 +189,9 @@ function encodeCBOR(data) {
         buf.writeDoubleBE(value, 1);
         buffers.push(buf);
       }
-    } else if (typeof value === "string") {
+    } else if (typeof value === 'string') {
       // Text string
-      const strBuf = Buffer.from(value, "utf8");
+      const strBuf = Buffer.from(value, 'utf8');
       const len = strBuf.length;
       if (len < 24) {
         buffers.push(Buffer.from([0x60 + len]));
@@ -236,8 +236,8 @@ function encodeCBOR(data) {
         buf.writeUInt32BE(len, 1);
         buffers.push(buf);
       }
-      value.forEach((item) => encode(item));
-    } else if (typeof value === "object") {
+      value.forEach(item => encode(item));
+    } else if (typeof value === 'object') {
       // Map/Object
       const entries = Object.entries(value);
       const len = entries.length;
@@ -274,7 +274,7 @@ function decodeCBOR(buffer) {
 
   function decode() {
     if (offset >= buffer.length) {
-      throw new Error("Unexpected end of CBOR data");
+      throw new Error('Unexpected end of CBOR data');
     }
 
     const byte = buffer[offset++];
@@ -317,7 +317,7 @@ function decodeCBOR(buffer) {
       case 3: {
         // Text string
         const len = readLength();
-        const data = buffer.toString("utf8", offset, offset + len);
+        const data = buffer.toString('utf8', offset, offset + len);
         offset += len;
         return data;
       }
@@ -382,7 +382,7 @@ function findProjectRoot(startDir = __dirname) {
 
   while (currentDir !== path.dirname(currentDir)) {
     // Stop at filesystem root
-    if (fs.existsSync(path.join(currentDir, "package.json"))) {
+    if (fs.existsSync(path.join(currentDir, 'package.json'))) {
       return currentDir;
     }
     currentDir = path.dirname(currentDir);

@@ -1,6 +1,6 @@
-const fs = require("fs");
-const path = require("path");
-const crypto = require("crypto");
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const {
   getAccountMemo,
   updateAccountMemo,
@@ -10,13 +10,13 @@ const {
   getNewMessages,
   getFirstTopicMessage,
   getMessagesInRange,
-} = require("./hedera");
+} = require('./hedera');
 const {
   encryptMessage,
   decryptMessage,
   encodeCBOR,
   decodeCBOR,
-} = require("./common");
+} = require('./common');
 
 // == Public functions ========================================================
 
@@ -38,39 +38,39 @@ async function setupMessageBox(client, dataDir, accountId) {
   messageBoxId = extractMessageBoxIdFromMemo(accountMemo);
   if (messageBoxId) {
     console.debug(
-      `✓ Found existing message box ${messageBoxId} for account ${accountId}`,
+      `✓ Found existing message box ${messageBoxId} for account ${accountId}`
     );
     const status = await checkMessageBoxStatus(messageBoxId);
     if (status.exists && status.hasPublicKey) {
       // Message box exists and has a public key. Checking if keys match...
       const keysMatch = await verifyKeyPairMatchesTopic(
         messageBoxId,
-        privateKey,
+        privateKey
       );
       // If keys does not match, warn the user and ask if they want to create a new message box anyway
       if (!keysMatch) {
         console.warn(
-          `\n⚠ WARNING: Your keys cannot decrypt messages for message box ${messageBoxId}!`,
+          `\n⚠ WARNING: Your keys cannot decrypt messages for message box ${messageBoxId}!`
         );
-        const readline = require("readline").createInterface({
+        const readline = require('readline').createInterface({
           input: process.stdin,
           output: process.stdout,
         });
-        const answer = await new Promise((resolve) => {
-          readline.question("? Create new message box? (yes/no): ", (ans) => {
+        const answer = await new Promise(resolve => {
+          readline.question('? Create new message box? (yes/no): ', ans => {
             readline.close();
             resolve(ans.toLowerCase());
           });
         });
-        if (!(answer === "yes" || answer === "y")) {
+        if (!(answer === 'yes' || answer === 'y')) {
           console.log(
-            "\n✗ Messages in the message box cannot be decrypted. Exiting.",
+            '\n✗ Messages in the message box cannot be decrypted. Exiting.'
           );
           process.exit(1);
         }
       } else {
         console.log(
-          `✓ Existing message box ${messageBoxId} is valid and keys match.`,
+          `✓ Existing message box ${messageBoxId} is valid and keys match.`
         );
         needsNewMessageBox = false;
       }
@@ -80,7 +80,7 @@ async function setupMessageBox(client, dataDir, accountId) {
   if (needsNewMessageBox) {
     result = await createTopic(
       client,
-      `[HIP-9999:${client.operatorAccountId}] ${client.operatorAccountId} listens here for HIP-9999 encrypted messages.`,
+      `[HIP-9999:${client.operatorAccountId}] ${client.operatorAccountId} listens here for HIP-9999 encrypted messages.`
     );
     if (!result.success) {
       throw new Error(`Failed to create new message box: ${result.error}`);
@@ -90,15 +90,15 @@ async function setupMessageBox(client, dataDir, accountId) {
     await updateAccountMemo(
       client,
       accountId,
-      `[HIP-9999:${messageBoxId}] If you want to contact me, send HIP-9999 encrypted messages to ${messageBoxId}.`,
+      `[HIP-9999:${messageBoxId}] If you want to contact me, send HIP-9999 encrypted messages to ${messageBoxId}.`
     );
     console.log(
-      `✓ Message box ${messageBoxId} set up correctly for account ${accountId}`,
+      `✓ Message box ${messageBoxId} set up correctly for account ${accountId}`
     );
     return { success: true, messageBoxId: messageBoxId };
   } else {
     console.log(
-      `✓ Message box ${messageBoxId} already set up correctly for account ${accountId}`,
+      `✓ Message box ${messageBoxId} already set up correctly for account ${accountId}`
     );
     return { success: true, messageBoxId: messageBoxId };
   }
@@ -111,8 +111,8 @@ async function setupMessageBox(client, dataDir, accountId) {
  */
 async function removeMessageBox(client, accountId) {
   const accountMemo = await getAccountMemo(client, accountId);
-  if (accountMemo != "") {
-    let result = await updateAccountMemo(client, accountId, "");
+  if (accountMemo != '') {
+    let result = await updateAccountMemo(client, accountId, '');
     if (result.success) {
       console.log(`✓ Message box removed for account ${accountId}`);
       return { success: true };
@@ -153,9 +153,9 @@ async function sendMessage(client, recipientAccountId, message, options = {}) {
 
     // Get public key, encrypt, and send
     const publicKey = await getPublicKeyFromTopic(messageBoxId);
-    console.log("⚙ Encrypting message...");
+    console.log('⚙ Encrypting message...');
     const encryptedPayload = encryptMessage(message, publicKey);
-    console.log("✓ Encrypted");
+    console.log('✓ Encrypted');
 
     console.log(`⚙ Sending to message box ${messageBoxId}...`);
 
@@ -163,16 +163,16 @@ async function sendMessage(client, recipientAccountId, message, options = {}) {
     if (useCBOR) {
       // Encode message using CBOR (send raw buffer, SDK will handle encoding)
       messageData = encodeCBOR({
-        type: "ENCRYPTED_MESSAGE",
-        format: "cbor",
+        type: 'ENCRYPTED_MESSAGE',
+        format: 'cbor',
         data: encryptedPayload,
       });
-      console.debug("✓ Message encoded with CBOR");
+      console.debug('✓ Message encoded with CBOR');
     } else {
       // Use JSON (default)
       messageData = JSON.stringify({
-        type: "ENCRYPTED_MESSAGE",
-        format: "json",
+        type: 'ENCRYPTED_MESSAGE',
+        format: 'json',
         data: encryptedPayload,
       });
     }
@@ -182,11 +182,11 @@ async function sendMessage(client, recipientAccountId, message, options = {}) {
       throw new Error(`Failed to send message: ${result.error}`);
     }
     console.log(
-      `✓ Encrypted message sent correctly (format: ${useCBOR ? "CBOR" : "JSON"}).`,
+      `✓ Encrypted message sent correctly (format: ${useCBOR ? 'CBOR' : 'JSON'}).`
     );
   } else {
     throw new Error(
-      `Message box ID not found for account ${recipientAccountId}`,
+      `Message box ID not found for account ${recipientAccountId}`
     );
   }
 }
@@ -211,7 +211,7 @@ async function pollMessages(client, dataDir, accountId) {
     if (messageBoxId) {
       pollingCache.messageBoxId = messageBoxId;
       console.log(
-        `✓ Found message box ${messageBoxId} for account ${accountId}`,
+        `✓ Found message box ${messageBoxId} for account ${accountId}`
       );
     } else {
       throw new Error(`Message box ID not found for account ${accountId}`);
@@ -221,7 +221,7 @@ async function pollMessages(client, dataDir, accountId) {
       true,
       pollingCache.messageBoxId,
       pollingCache.privateKey,
-      pollingCache,
+      pollingCache
     );
   }
 
@@ -229,7 +229,7 @@ async function pollMessages(client, dataDir, accountId) {
     false,
     pollingCache.messageBoxId,
     pollingCache.privateKey,
-    pollingCache,
+    pollingCache
   );
 }
 
@@ -247,7 +247,7 @@ async function checkMessages(
   dataDir,
   accountId,
   startSequence,
-  endSequence,
+  endSequence
 ) {
   const { privateKey } = loadOrGenerateRSAKeyPair(dataDir);
 
@@ -261,44 +261,44 @@ async function checkMessages(
 
   console.log(`✓ Found message box ${messageBoxId} for account ${accountId}`);
 
-  const endMsg = endSequence ? ` to ${endSequence}` : " onwards";
+  const endMsg = endSequence ? ` to ${endSequence}` : ' onwards';
   console.log(
-    `⚙ Fetching messages from sequence ${startSequence}${endMsg}...\n`,
+    `⚙ Fetching messages from sequence ${startSequence}${endMsg}...\n`
   );
 
   const rawMessages = await getMessagesInRange(
     messageBoxId,
     startSequence,
-    endSequence,
+    endSequence
   );
   const messages = [];
 
-  rawMessages.forEach((msg) => {
-    const messageBuffer = Buffer.from(msg.message, "base64");
+  rawMessages.forEach(msg => {
+    const messageBuffer = Buffer.from(msg.message, 'base64');
     const timestamp = new Date(
-      parseFloat(msg.consensus_timestamp) * 1000,
+      parseFloat(msg.consensus_timestamp) * 1000
     ).toISOString();
 
     const { parsed, format, raw } = parseMessageContent(messageBuffer);
 
-    if (parsed && parsed.type === "ENCRYPTED_MESSAGE") {
+    if (parsed && parsed.type === 'ENCRYPTED_MESSAGE') {
       try {
         const decrypted = decryptMessage(parsed.data, privateKey);
         messages.push(
-          `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Encrypted message: ${decrypted}`,
+          `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Encrypted message: ${decrypted}`
         );
       } catch (error) {
         messages.push(
-          `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Encrypted message (cannot decrypt): ${error.message}`,
+          `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Encrypted message (cannot decrypt): ${error.message}`
         );
       }
-    } else if (parsed && parsed.type === "PUBLIC_KEY") {
+    } else if (parsed && parsed.type === 'PUBLIC_KEY') {
       messages.push(
-        `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Public key published`,
+        `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Public key published`
       );
     } else {
       messages.push(
-        `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Plain text message: ${raw}`,
+        `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Plain text message: ${raw}`
       );
     }
   });
@@ -332,8 +332,8 @@ function parseMessageContent(messageBuffer) {
     try {
       const parsed = decodeCBOR(messageBuffer);
       // Verify it's a valid message object with expected structure
-      if (parsed && typeof parsed === "object" && parsed.type) {
-        return { parsed, format: "cbor", raw: messageBuffer };
+      if (parsed && typeof parsed === 'object' && parsed.type) {
+        return { parsed, format: 'cbor', raw: messageBuffer };
       }
     } catch {
       // Fall through to try JSON
@@ -342,14 +342,14 @@ function parseMessageContent(messageBuffer) {
 
   try {
     // Try to parse as JSON
-    const content = messageBuffer.toString("utf8");
-    return { parsed: JSON.parse(content), format: "json", raw: content };
+    const content = messageBuffer.toString('utf8');
+    return { parsed: JSON.parse(content), format: 'json', raw: content };
   } catch {
     // If both fail, return as plain text
     return {
       parsed: null,
-      format: "plain",
-      raw: messageBuffer.toString("utf8"),
+      format: 'plain',
+      raw: messageBuffer.toString('utf8'),
     };
   }
 }
@@ -376,36 +376,42 @@ async function listenForMessages(isFirstPoll, topicId, privateKey, cache) {
     const newMessages = await getNewMessages(topicId, cache.lastSequenceNumber);
     const messages = [];
 
-    newMessages.forEach((msg) => {
-      const messageBuffer = Buffer.from(msg.message, "base64");
+    newMessages.forEach(msg => {
+      const messageBuffer = Buffer.from(msg.message, 'base64');
       const timestamp = new Date(
-        parseFloat(msg.consensus_timestamp) * 1000,
+        parseFloat(msg.consensus_timestamp) * 1000
       ).toISOString();
 
       const { parsed, format, raw } = parseMessageContent(messageBuffer);
 
-      if (parsed && parsed.type === "ENCRYPTED_MESSAGE") {
+      if (parsed && parsed.type === 'ENCRYPTED_MESSAGE') {
         try {
           const decrypted = decryptMessage(parsed.data, privateKey);
           messages.push(
-            `[${timestamp}] [${format.toUpperCase()}] Encrypted message: ${decrypted}`,
+            `[${timestamp}] [${format.toUpperCase()}] Encrypted message: ${decrypted}`
           );
         } catch (error) {
           messages.push(
-            `[${timestamp}] [${format.toUpperCase()}] Encrypted message (cannot decrypt): ${error.message}`,
+            `[${timestamp}] [${format.toUpperCase()}] Encrypted message (cannot decrypt): ${error.message}`
           );
         }
       } else {
         messages.push(
-          `[${timestamp}] [${format.toUpperCase()}] Plain text message: ${raw}`,
+          `[${timestamp}] [${format.toUpperCase()}] Plain text message: ${raw}`
         );
       }
-      cache.lastSequenceNumber = msg.sequence_number;
+
+      // Update lastSequenceNumber: use _maxSequence if available (for chunked messages)
+      // otherwise use the regular sequence_number
+      const lastSeq = msg._maxSequence || msg.sequence_number;
+      if (lastSeq > cache.lastSequenceNumber) {
+        cache.lastSequenceNumber = lastSeq;
+      }
     });
 
     return messages;
   } catch (error) {
-    console.error("Error polling:", error.message);
+    console.error('Error polling:', error.message);
     return []; // Return empty array on error
   }
 }
@@ -420,9 +426,9 @@ async function publishPublicKey(client, messageBoxId, publicKey) {
   await submitMessageToHCS(
     client,
     messageBoxId,
-    JSON.stringify({ type: "PUBLIC_KEY", publicKey: publicKey }),
+    JSON.stringify({ type: 'PUBLIC_KEY', publicKey: publicKey })
   );
-  console.log("✓ Public key published");
+  console.log('✓ Public key published');
 }
 
 /**
@@ -435,14 +441,14 @@ async function checkMessageBoxStatus(messageBoxId) {
     const firstMessage = await getFirstTopicMessage(messageBoxId);
 
     if (firstMessage) {
-      const content = Buffer.from(firstMessage.message, "base64").toString(
-        "utf8",
+      const content = Buffer.from(firstMessage.message, 'base64').toString(
+        'utf8'
       );
       try {
         const parsed = JSON.parse(content);
         return {
           exists: true,
-          hasPublicKey: parsed.type === "PUBLIC_KEY" && parsed.publicKey,
+          hasPublicKey: parsed.type === 'PUBLIC_KEY' && parsed.publicKey,
         };
       } catch {
         return { exists: true, hasPublicKey: false };
@@ -466,19 +472,19 @@ async function getPublicKeyFromTopic(topicId) {
 
     if (response.message) {
       // Decode the base64 message
-      const messageContent = Buffer.from(response.message, "base64").toString(
-        "utf8",
+      const messageContent = Buffer.from(response.message, 'base64').toString(
+        'utf8'
       );
       const parsed = JSON.parse(messageContent);
 
-      if (parsed.type === "PUBLIC_KEY" && parsed.publicKey) {
-        console.log("✓ Public key retrieved from topic");
+      if (parsed.type === 'PUBLIC_KEY' && parsed.publicKey) {
+        console.log('✓ Public key retrieved from topic');
         return parsed.publicKey;
       } else {
-        throw new Error("First message does not contain a public key");
+        throw new Error('First message does not contain a public key');
       }
     } else {
-      throw new Error("No messages found in topic");
+      throw new Error('No messages found in topic');
     }
   } catch (error) {
     throw new Error(`Failed to get public key from topic: ${error.message}`);
@@ -494,12 +500,12 @@ async function getPublicKeyFromTopic(topicId) {
 async function verifyKeyPairMatchesTopic(messageBoxId, privateKey) {
   try {
     const messageBoxPublicKey = await getPublicKeyFromTopic(messageBoxId);
-    const testMessage = "key_verification_test";
+    const testMessage = 'key_verification_test';
     const encrypted = encryptMessage(testMessage, messageBoxPublicKey);
     const decrypted = decryptMessage(encrypted, privateKey);
     return decrypted === testMessage;
   } catch (error) {
-    console.log("✗ Key verification failed:", error.message);
+    console.log('✗ Key verification failed:', error.message);
     return false;
   }
 }
@@ -509,27 +515,27 @@ async function verifyKeyPairMatchesTopic(messageBoxId, privateKey) {
  * @returns {{ publicKey: string, privateKey: string }} RSA key pair
  */
 function generateRSAKeyPair(dataDir) {
-  console.log("⚙ Generating new RSA key pair...");
+  console.log('⚙ Generating new RSA key pair...');
 
   // Create data directory if it doesn't exist
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 
-  const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength: 2048,
     publicKeyEncoding: {
-      type: "spki",
-      format: "pem",
+      type: 'spki',
+      format: 'pem',
     },
     privateKeyEncoding: {
-      type: "pkcs8",
-      format: "pem",
+      type: 'pkcs8',
+      format: 'pem',
     },
   });
 
-  fs.writeFileSync(getPrivateKeyFilePath(dataDir), privateKey, "utf8");
-  fs.writeFileSync(getPublicKeyFilePath(dataDir), publicKey, "utf8");
+  fs.writeFileSync(getPrivateKeyFilePath(dataDir), privateKey, 'utf8');
+  fs.writeFileSync(getPublicKeyFilePath(dataDir), publicKey, 'utf8');
 
   console.log(`✓ RSA key pair generated and saved to ${dataDir}`);
   return { publicKey, privateKey };
@@ -544,10 +550,10 @@ function loadOrGenerateRSAKeyPair(dataDir) {
   const publicKeyFile = getPublicKeyFilePath(dataDir);
 
   if (fs.existsSync(privateKeyFile) && fs.existsSync(publicKeyFile)) {
-    console.debug("⚙ Loading existing RSA key pair");
-    const privateKey = fs.readFileSync(privateKeyFile, "utf8");
-    const publicKey = fs.readFileSync(publicKeyFile, "utf8");
-    console.log("✓ RSA key pair loaded");
+    console.debug('⚙ Loading existing RSA key pair');
+    const privateKey = fs.readFileSync(privateKeyFile, 'utf8');
+    const publicKey = fs.readFileSync(publicKeyFile, 'utf8');
+    console.log('✓ RSA key pair loaded');
     return { publicKey, privateKey };
   }
 
@@ -560,7 +566,7 @@ function loadOrGenerateRSAKeyPair(dataDir) {
  * @returns {string} Private key file path
  */
 function getPrivateKeyFilePath(dataDir) {
-  return path.join(dataDir, "rsa_private.pem");
+  return path.join(dataDir, 'rsa_private.pem');
 }
 
 /**
@@ -569,7 +575,7 @@ function getPrivateKeyFilePath(dataDir) {
  * @returns {string} Public key file path
  */
 function getPublicKeyFilePath(dataDir) {
-  return path.join(dataDir, "rsa_public.pem");
+  return path.join(dataDir, 'rsa_public.pem');
 }
 
 /**

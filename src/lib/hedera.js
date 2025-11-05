@@ -6,8 +6,8 @@ const {
   PrivateKey,
   AccountUpdateTransaction,
   TopicMessageSubmitTransaction,
-} = require("@hashgraph/sdk");
-const https = require("https");
+} = require('@hashgraph/sdk');
+const https = require('https');
 
 // Private functions
 
@@ -17,7 +17,7 @@ const https = require("https");
  * @returns {boolean} Whether the transaction was successful.
  */
 function isTransactionSuccessful(receipt) {
-  return receipt.status.toString() === "SUCCESS";
+  return receipt.status.toString() === 'SUCCESS';
 }
 
 // Public functions
@@ -29,22 +29,22 @@ function isTransactionSuccessful(receipt) {
 function initializeClient() {
   const operatorId = process.env.HEDERA_ACCOUNT_ID;
   const operatorKey = process.env.HEDERA_PRIVATE_KEY;
-  const network = process.env.HEDERA_NETWORK || "testnet";
+  const network = process.env.HEDERA_NETWORK || 'testnet';
 
   if (!operatorId || !operatorKey) {
     throw new Error(
-      "✗ Please set HEDERA_ACCOUNT_ID and HEDERA_PRIVATE_KEY environment variables",
+      '✗ Please set HEDERA_ACCOUNT_ID and HEDERA_PRIVATE_KEY environment variables'
     );
   }
 
   // Initialize client based on network configuration
   const client =
-    network.toLowerCase() === "mainnet"
+    network.toLowerCase() === 'mainnet'
       ? Client.forMainnet()
       : Client.forTestnet();
   client.setOperator(
     AccountId.fromString(operatorId),
-    PrivateKey.fromStringDer(operatorKey),
+    PrivateKey.fromStringDer(operatorKey)
   );
 
   console.debug(`✓ Hedera client initialized (${network})`);
@@ -52,15 +52,17 @@ function initializeClient() {
 }
 
 /**
- * Get Mirror Node URL based on the client's network
- * @param {import("@hashgraph/sdk").Client} client - The Hedera client.
+ * Get Mirror Node URL from environment variable or default
  * @returns {string} The Mirror Node URL.
  */
-function getMirrorNodeUrl(client) {
-  if (process.env.MIRROR_NODE_URL) {
-    return process.env.MIRROR_NODE_URL;
-  }
-  return client.getMirrorNodeUrl();
+function getMirrorNodeUrl() {
+  const network = process.env.HEDERA_NETWORK || 'testnet';
+  const defaultUrl =
+    network.toLowerCase() === 'mainnet'
+      ? 'https://mainnet.mirrornode.hedera.com'
+      : 'https://testnet.mirrornode.hedera.com';
+
+  return process.env.MIRROR_NODE_URL || defaultUrl;
 }
 
 /**
@@ -86,7 +88,7 @@ async function updateAccountMemo(client, accountId, memo) {
     .setAccountId(accountId)
     .setAccountMemo(memo)
     .execute(client)
-    .then((tx) => tx.getReceipt(client));
+    .then(tx => tx.getReceipt(client));
 
   if (isTransactionSuccessful(receipt)) {
     console.debug(`✓ Account ${accountId} updated with memo "${memo}"`);
@@ -105,7 +107,7 @@ async function createTopic(client, memo) {
   const receipt = await new TopicCreateTransaction()
     .setTopicMemo(memo)
     .execute(client)
-    .then((tx) => tx.getReceipt(client));
+    .then(tx => tx.getReceipt(client));
 
   if (isTransactionSuccessful(receipt)) {
     console.debug(`✓ Topic created: ${receipt.topicId}`);
@@ -128,7 +130,7 @@ async function submitMessageToHCS(client, topicId, message) {
     message: message,
   })
     .execute(client)
-    .then((tx) => tx.getReceipt(client));
+    .then(tx => tx.getReceipt(client));
 
   if (isTransactionSuccessful(receipt)) {
     console.debug(`✓ Message submitted to ${topicId}`);
@@ -152,12 +154,12 @@ async function queryTopicMessages(topicId, options = {}) {
   const mirrorNodeUrl = getMirrorNodeUrl();
   const params = new URLSearchParams();
 
-  if (options.limit) params.append("limit", options.limit);
-  if (options.order) params.append("order", options.order);
+  if (options.limit) params.append('limit', options.limit);
+  if (options.order) params.append('order', options.order);
   if (options.sequenceNumber && options.operator) {
     params.append(
-      "sequencenumber",
-      `${options.operator}:${options.sequenceNumber}`,
+      'sequencenumber',
+      `${options.operator}:${options.sequenceNumber}`
     );
   }
 
@@ -165,26 +167,172 @@ async function queryTopicMessages(topicId, options = {}) {
 
   return new Promise((resolve, reject) => {
     https
-      .get(url, (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
+      .get(url, res => {
+        let data = '';
+        res.on('data', chunk => (data += chunk));
+        res.on('end', () => {
           try {
             const response = JSON.parse(data);
             resolve(response);
           } catch (error) {
             reject(
               new Error(
-                `Failed to parse Mirror Node response: ${error.message}`,
-              ),
+                `Failed to parse Mirror Node response: ${error.message}`
+              )
             );
           }
         });
       })
-      .on("error", (error) => {
+      .on('error', error => {
         reject(new Error(`Mirror Node request failed: ${error.message}`));
       });
   });
+}
+
+/**
+ * Reassemble chunked messages from HCS
+ * Messages larger than 1KB are split into multiple chunks by HCS
+ * @param {Array} messages - Array of messages from Mirror Node
+ * @returns {Array} Array of reassembled messages
+ */
+function reassembleChunkedMessages(messages) {
+  // Ensure we always return an array
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return [];
+  }
+
+  const chunkedGroups = new Map(); // Group by initial_transaction_id
+  const completeMessages = [];
+
+  messages.forEach(msg => {
+    // Safety check: ensure msg and msg.message exist
+    if (!msg || !msg.message) {
+      console.warn('⚠ Skipping invalid message:', msg);
+      return;
+    }
+
+    // If no chunks, it's a complete message
+    if (!msg.chunk_info) {
+      completeMessages.push(msg);
+      return;
+    }
+
+    // Create a unique key from initial_transaction_id
+    const txId = msg.chunk_info.initial_transaction_id;
+    if (!txId || !txId.account_id || !txId.transaction_valid_start) {
+      console.warn('⚠ Skipping chunk with invalid transaction ID:', msg);
+      return;
+    }
+
+    const key = `${txId.account_id}-${txId.transaction_valid_start}-${txId.nonce || 0}`;
+    const { number: chunkNum, total: chunkTotal } = msg.chunk_info;
+
+    if (!chunkedGroups.has(key)) {
+      chunkedGroups.set(key, {
+        chunks: new Array(chunkTotal),
+        metadata: { ...msg }, // Copy first chunk's metadata
+        total: chunkTotal,
+        minSequence: msg.sequence_number,
+        maxSequence: msg.sequence_number,
+        hasFirstChunk: chunkNum === 1, // Track if we have chunk #1
+      });
+    }
+
+    const group = chunkedGroups.get(key);
+
+    // Track if this is the first chunk
+    if (chunkNum === 1) {
+      group.hasFirstChunk = true;
+    }
+
+    group.chunks[chunkNum - 1] = msg.message; // Store chunk in order (1-indexed)
+
+    // Track the minimum and maximum sequence numbers
+    if (msg.sequence_number < group.minSequence) {
+      group.minSequence = msg.sequence_number;
+    }
+    if (msg.sequence_number > group.maxSequence) {
+      group.maxSequence = msg.sequence_number;
+    }
+  });
+
+  // Reassemble chunked messages
+  chunkedGroups.forEach((group, key) => {
+    // Skip groups that don't have the first chunk (incomplete/truncated)
+    if (!group.hasFirstChunk) {
+      console.warn(
+        `⚠ Skipping incomplete chunked message (transaction ${key.split('-')[0]}): missing first chunk`
+      );
+      return;
+    }
+
+    // Validate that we have chunks array and it's the right length
+    if (
+      !group.chunks ||
+      !Array.isArray(group.chunks) ||
+      group.chunks.length !== group.total
+    ) {
+      console.warn(
+        `⚠ Invalid chunk array for transaction ${key.split('-')[0]}: expected ${group.total} chunks, got ${group.chunks ? group.chunks.length : 0}`
+      );
+      return;
+    }
+
+    // Check if all chunks are present and valid
+    const allChunksPresent = group.chunks.every(
+      chunk =>
+        chunk !== undefined &&
+        chunk !== null &&
+        typeof chunk === 'string' &&
+        chunk.length > 0
+    );
+
+    if (allChunksPresent) {
+      try {
+        // Decode each base64 chunk to binary, then concatenate
+        const binaryChunks = group.chunks.map((chunk, idx) => {
+          try {
+            return Buffer.from(chunk, 'base64');
+          } catch (err) {
+            throw new Error(
+              `Failed to decode chunk ${idx + 1}: ${err.message}`
+            );
+          }
+        });
+
+        const concatenatedBinary = Buffer.concat(binaryChunks);
+        // Re-encode the concatenated binary back to base64
+        const reassembledBase64 = concatenatedBinary.toString('base64');
+
+        const reassembledMessage = {
+          ...group.metadata,
+          message: reassembledBase64,
+          sequence_number: group.minSequence, // Use first chunk's sequence number for display
+          _maxSequence: group.maxSequence, // Internal field to track last chunk processed
+        };
+        // Delete chunk_info instead of setting it to undefined
+        delete reassembledMessage.chunk_info;
+
+        completeMessages.push(reassembledMessage);
+      } catch (error) {
+        console.warn(
+          `⚠ Error reassembling chunked message (transaction ${key.split('-')[0]}):`,
+          error.message
+        );
+      }
+    } else {
+      const received = group.chunks.filter(
+        c =>
+          c !== undefined && c !== null && typeof c === 'string' && c.length > 0
+      ).length;
+      console.warn(
+        `⚠ Incomplete chunked message (transaction ${key.split('-')[0]}): ${received}/${group.total} chunks received`
+      );
+    }
+  });
+
+  // Sort by sequence number to maintain order
+  return completeMessages.sort((a, b) => a.sequence_number - b.sequence_number);
 }
 
 /**
@@ -195,7 +343,7 @@ async function queryTopicMessages(topicId, options = {}) {
 async function getLatestSequenceNumber(topicId) {
   try {
     const response = await queryTopicMessages(topicId, {
-      order: "desc",
+      order: 'desc',
       limit: 1,
     });
     return response.messages?.[0]?.sequence_number || null;
@@ -208,17 +356,18 @@ async function getLatestSequenceNumber(topicId) {
  * Get new messages from a topic after a given sequence number
  * @param {string} topicId - The topic ID
  * @param {number} afterSequenceNumber - Get messages after this sequence number
- * @returns {Promise<Array>} Array of messages
+ * @returns {Promise<Array>} Array of messages (with chunks reassembled)
  */
 async function getNewMessages(topicId, afterSequenceNumber) {
   try {
     const response = await queryTopicMessages(topicId, {
       sequenceNumber: afterSequenceNumber,
-      operator: "gt",
-      order: "asc",
+      operator: 'gt',
+      order: 'asc',
       limit: 100,
     });
-    return response.messages || [];
+    const messages = response.messages || [];
+    return reassembleChunkedMessages(messages);
   } catch (error) {
     throw new Error(`Failed to get new messages: ${error.message}`);
   }
@@ -233,7 +382,7 @@ async function getFirstTopicMessage(topicId) {
   try {
     const response = await queryTopicMessages(topicId, {
       limit: 1,
-      order: "asc",
+      order: 'asc',
     });
     return response.messages?.[0] || null;
   } catch (error) {
@@ -246,7 +395,7 @@ async function getFirstTopicMessage(topicId) {
  * @param {string} topicId - The topic ID
  * @param {number} startSequence - Starting sequence number (inclusive)
  * @param {number} [endSequence] - Ending sequence number (inclusive), if not provided gets all messages from start
- * @returns {Promise<Array>} Array of messages
+ * @returns {Promise<Array>} Array of messages (with chunks reassembled)
  */
 async function getMessagesInRange(topicId, startSequence, endSequence) {
   try {
@@ -257,8 +406,8 @@ async function getMessagesInRange(topicId, startSequence, endSequence) {
     while (hasMore) {
       const response = await queryTopicMessages(topicId, {
         sequenceNumber: lastSequence,
-        operator: "gt",
-        order: "asc",
+        operator: 'gt',
+        order: 'asc',
         limit: 100,
       });
 
@@ -286,7 +435,7 @@ async function getMessagesInRange(topicId, startSequence, endSequence) {
       }
     }
 
-    return allMessages;
+    return reassembleChunkedMessages(allMessages);
   } catch (error) {
     throw new Error(`Failed to get messages in range: ${error.message}`);
   }
