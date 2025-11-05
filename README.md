@@ -1,22 +1,26 @@
 # Hiero Message Box - Encrypted Asynchronous Messaging
 
-Hiero Message Box is a simple way for users to set a message box where receive private messages, for example getting alert about security communications about their assets or wallet, etc.
+Hiero Message Box is a simple way for users to set up a message box to receive private messages, for example getting alerts about security communications about their assets or wallet, etc.
 
 The repo contains the code both for the sender and the receiver.
 
 The goal is to enable users to send encrypted messages to an account's message box just like this:
 
-`npm run send-message 0.0.xxx "This is a secret message for you"`
+```bash
+npm run send-message 0.0.1441 "This is a secret message for you"
+```
 
-Users can check their messages like this
+Users can listen for new messages in real-time using this command:
 
-`npm run check-messages <STARTING_INDEX> # starts from the beginning`
+```bash
+npm run listen-for-new-messages
+```
 
-They can also listen to new messages using this command:
+When setting up for the first time, the program will:
 
-`npm run listen-for-new-messages`
-
-When trying to listen for the first time, the program will configure the account accordingly to the configuration.
+- Generate RSA key pairs for encryption/decryption
+- Create a Hedera topic as your message box
+- Update your account memo with the topic ID in HIP-9999 format
 
 To avoid spam, users can decide to set a paid topic as their message box.
 
@@ -42,15 +46,15 @@ To avoid spam, users can decide to set a paid topic as their message box.
 
 2. Install dependencies:
 
-```bash
-npm install
-```
+   ```bash
+   npm install
+   ```
 
 3. Create a `.env` file with your Hedera credentials:
 
-```bash
-cp .env.example .env
-```
+   ```bash
+   cp .env.example .env
+   ```
 
 4. Edit `.env` and add your Hedera account details:
 
@@ -73,35 +77,46 @@ MIRROR_NODE_URL=https://mainnet.mirrornode.hedera.com
 
 ## Usage
 
-### Listen for Messages (Receiver)
+### Setup Message Box
 
-Start the listener to receive encrypted messages:
+Before listening for messages, you need to set up your message box:
 
 ```bash
-npm start
-# or
-npm run listen
+npm run setup-message-box
 ```
 
-On first run, the application will:
+This will:
 
-1. Generate and save an RSA key pair in `data/` folder
+1. Generate and save an RSA key pair in `data/` folder (if not already present)
 2. Initialize Hedera client
-3. Create a new Hedera topic
-4. Publish your public key to the topic (as the first message)
-5. Update your account memo with the topic ID (e.g., "Write here: 0.0.xxxxx")
-6. Start listening for messages via Mirror Node API
+3. Check if you already have a message box configured in your account memo
+4. If found, verify the topic exists and your keys can decrypt messages
+5. If not found or keys don't match, create a new Hedera topic as your message box
+6. Publish your public key to the topic (as the first message)
+7. Update your account memo with the topic ID in HIP-9999 format: `[HIP-9999:0.0.xxxxx] If you want to contact me, send HIP-9999 encrypted messages to 0.0.xxxxx.`
 
-#### Subsequent Runs
+### Listen for New Messages (Real-time Polling)
 
-The application will:
+Start the listener to continuously poll for and receive encrypted messages:
+
+```bash
+npm run listen-for-new-messages
+# or
+npm start
+```
+
+**Note:** `npm start` will run `setup-message-box` first, then start listening.
+
+The listener will:
 
 - Load existing RSA keys from `data/` folder
-- Check the account memo for the topic ID
-- Verify the topic exists and has a public key message via Mirror Node API
-- Verify local private key can decrypt messages encrypted with the topic's public key
-  - If keys don't match: offer to create a new topic or exit
-  - If everything is valid: start listening for messages
+- Extract the message box topic ID from your account memo
+- Get the latest sequence number from the topic
+- Poll the Mirror Node API every 3 seconds for new messages
+- Decrypt and display any encrypted messages in real-time
+- Track the last sequence number to avoid duplicate messages
+
+Press `Ctrl+C` to stop listening.
 
 ### Send Encrypted Messages (Sender)
 
@@ -109,30 +124,38 @@ Send an encrypted message to another account:
 
 ```bash
 npm run send-message <account-id> <message>
-# or
-node send-message.js <account-id> <message>
 ```
 
 **Example:**
 
 ```bash
-npm run send 0.0.1441 "Hello, this is a secret message!"
+npm run send-message 0.0.1441 "Hello, this is a secret message!"
 ```
 
 #### How it works
 
-1. Reads the target account's memo to find the topic ID
+1. Reads the target account's memo to find the message box topic ID
 2. Retrieves the recipient's public key from the first message in the topic via Mirror Node API
 3. Generates a random AES-256 key
 4. Encrypts the message with AES (fast, suitable for large messages)
 5. Encrypts the AES key with the recipient's RSA public key
-6. Sends the encrypted payload to the topic
+6. Sends the encrypted payload to the topic as a JSON message with type `ENCRYPTED_MESSAGE`
 
 The recipient will automatically decrypt and display the message when polling.
 
+### Remove Message Box
+
+To remove your message box configuration (clears your account memo):
+
+```bash
+npm run remove-message-box
+```
+
+This will clear your account memo but will **not** delete the topic or your RSA keys.
+
 ## Project Flow
 
-### Listener (Receiver)
+### Setup (One-time or when creating new message box)
 
 ```text
 ┌─────────────────────────────────────┐
@@ -159,14 +182,38 @@ The recipient will automatically decrypt and display the message when polling.
                ↓
 ┌─────────────────────────────────────┐
 │ 6. Create New Topic (if needed)     │
+│    - Publish public key             │
+│    - Update account memo            │
+└─────────────────────────────────────┘
+```
+
+### Listener (Receiver)
+
+```text
+┌─────────────────────────────────────┐
+│ 1. Load RSA Keys & Hedera Client    │
 └──────────────┬──────────────────────┘
                ↓
 ┌─────────────────────────────────────┐
-│ 7. Poll for Encrypted Messages      │
-│    - Fetch via Mirror Node API      │
-│    - Decrypt with hybrid AES+RSA    │
-│    - Print to console               │
-└─────────────────────────────────────┘
+│ 2. Extract Topic ID from Memo       │
+└──────────────┬──────────────────────┘
+               ↓
+┌─────────────────────────────────────┐
+│ 3. Get Latest Sequence Number       │
+│    (via Mirror Node API)            │
+└──────────────┬──────────────────────┘
+               ↓
+┌─────────────────────────────────────┐
+│ 4. Poll for New Messages (Loop)     │
+│    - Query Mirror Node API          │
+│    - Filter messages > last seq     │
+│    - Decrypt ENCRYPTED_MESSAGE      │
+│    - Display to console             │
+│    - Update last sequence number    │
+│    - Wait 3 seconds                 │
+└──────────────┬──────────────────────┘
+               ↓
+               └─────────── (repeat)
 ```
 
 ### Sender
@@ -182,11 +229,12 @@ The recipient will automatically decrypt and display the message when polling.
                ↓
 ┌─────────────────────────────────────┐
 │ 3. Extract Topic ID from Memo       │
+│    Format: [HIP-9999:0.0.xxxxx]     │
 └──────────────┬──────────────────────┘
                ↓
 ┌─────────────────────────────────────┐
 │ 4. Get Public Key via Mirror Node   │
-│    (from first message)             │
+│    (from first message in topic)    │
 └──────────────┬──────────────────────┘
                ↓
 ┌─────────────────────────────────────┐
@@ -202,7 +250,8 @@ The recipient will automatically decrypt and display the message when polling.
 └──────────────┬──────────────────────┘
                ↓
 ┌─────────────────────────────────────┐
-│ 8. Submit to Topic                  │
+│ 8. Submit Encrypted Payload to      │
+│    Topic as JSON with type field    │
 └─────────────────────────────────────┘
 ```
 
@@ -222,18 +271,71 @@ This project uses **hybrid encryption** for security and efficiency:
 
 ## Architecture
 
+### Modular Design
+
+The codebase is organized into three main modules:
+
+1. **`lib/common.js`**: Utility functions
+   - Environment variable loading from `.env` file
+   - Hybrid encryption/decryption (AES-256 + RSA-2048)
+
+2. **`lib/hedera.js`**: Hedera blockchain operations
+   - Client initialization (testnet/mainnet)
+   - Account memo read/update
+   - Topic creation and message submission
+   - Mirror Node URL configuration
+
+3. **`lib/message-box.js`**: Core message box logic
+   - Message box setup with key verification
+   - RSA key pair generation and management
+   - Public key publishing and retrieval
+   - Message encryption and sending
+   - Real-time message polling with sequence tracking
+
 ### Mirror Node API Usage
 
-This application uses the Hedera Mirror Node API instead of direct gRPC subscriptions for improved reliability:
+This application uses the Hedera Mirror Node REST API for all query operations:
 
-- **Topic Verification**: Checks if topics exist and validates their first message
-- **Message Polling**: Polls for new messages every 3 seconds
-- **Public Key Retrieval**: Fetches recipient public keys from topic's first message
-- **Stateless Operation**: No local config files needed, all state verified live from the network
+- **Topic Verification**: `GET /api/v1/topics/{topicId}/messages?limit=1&order=asc`
+  - Checks if topics exist and validates their first message contains a public key
+- **Public Key Retrieval**: `GET /api/v1/topics/{topicId}/messages/1`
+  - Fetches recipient public keys from topic's first message
+- **Message Polling**: `GET /api/v1/topics/{topicId}/messages?sequencenumber=gt:{lastSeq}&order=asc&limit=100`
+  - Polls for new messages every 3 seconds
+  - Tracks last sequence number to avoid duplicates
+  - Filters for messages with type `ENCRYPTED_MESSAGE`
+- **Initial Sync**: `GET /api/v1/topics/{topicId}/messages?order=desc&limit=1`
+  - Gets the latest sequence number on first poll to avoid processing old messages
+
+### Message Format
+
+All messages submitted to the topic are JSON objects with a `type` field:
+
+**Public Key Message** (first message in topic):
+
+```json
+{
+  "type": "PUBLIC_KEY",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\n..."
+}
+```
+
+**Encrypted Message**:
+
+```json
+{
+  "type": "ENCRYPTED_MESSAGE",
+  "data": {
+    "encryptedMessage": "base64...",
+    "encryptedKey": "base64...",
+    "iv": "base64..."
+  }
+}
+```
 
 ### Key Verification System
 
-On startup, the listener performs cryptographic verification:
+On setup, the application performs cryptographic verification:
 
 1. Fetches the public key from the topic (first message)
 2. Encrypts a test message with the topic's public key
@@ -243,14 +345,38 @@ On startup, the listener performs cryptographic verification:
 
 This prevents silent failures where messages appear to arrive but can't be decrypted.
 
+### Polling Cache System
+
+The listener maintains a stateful cache to optimize polling:
+
+```javascript
+{
+  firstCall: true,              // Flag for initial sync
+  lastSequenceNumber: 0,        // Last processed message sequence
+  messageBoxId: "0.0.xxxxx",   // Topic ID
+  privateKey: "..."            // RSA private key (PEM format)
+}
+```
+
+This allows the listener to:
+
+- Skip processing on first call (just get latest sequence)
+- Query only new messages after the last sequence number
+- Maintain state across polling cycles without re-reading keys or memo
+
 ## File Structure
 
 ```text
 ./
 ├── src/
-│   ├── common.js                   # Common functions
+│   ├── setup-message-box.js        # Setup message box for account
 │   ├── listen-for-new-messages.js  # Listener/Receiver application
-│   └── send-message.js             # Sender application
+│   ├── send-message.js             # Sender application
+│   ├── remove-message-box.js       # Remove message box configuration
+│   └── lib/
+│       ├── common.js               # Common utilities (encryption, env loading)
+│       ├── hedera.js               # Hedera SDK wrappers and client initialization
+│       └── message-box.js          # Core message box logic (setup, send, poll)
 ├── data/
 │   ├── rsa_private.pem             # RSA private key (auto-generated)
 │   └── rsa_public.pem              # RSA public key (auto-generated)
@@ -260,12 +386,40 @@ This prevents silent failures where messages appear to arrive but can't be decry
 └── .gitignore                      # Git ignore rules
 ```
 
+## Available NPM Scripts
+
+```bash
+npm start                      # Setup message box + start listening
+npm run setup-message-box      # Setup/verify message box configuration
+npm run listen-for-new-messages # Start polling for new messages
+npm run send-message <id> <msg> # Send encrypted message to account
+npm run remove-message-box     # Remove message box (clear account memo)
+npm run format                 # Format code with Prettier
+```
+
 ## Configuration Files
 
-### RSA Keys (auto-generated)
+### Environment Variables (`.env`)
 
-- `data/rsa_private.pem`: Your private key for decryption
-- `data/rsa_public.pem`: Your public key (shared in the topic)
+Required variables:
+
+```text
+HEDERA_ACCOUNT_ID=0.0.xxxxx
+HEDERA_PRIVATE_KEY=302e020100300506032b657004220420...
+DATA_DIR=./data
+```
+
+Optional variables (defaults to testnet):
+
+```text
+HEDERA_NETWORK=testnet
+MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
+```
+
+### RSA Keys (auto-generated in `data/` folder)
+
+- `data/rsa_private.pem`: Your private key for decryption (keep secure!)
+- `data/rsa_public.pem`: Your public key (published to the topic for others to use)
 
 ## Security Notes
 
@@ -298,24 +452,54 @@ If these variables are not set, the application defaults to **testnet**.
 
 ### "Please set HEDERA_ACCOUNT_ID and HEDERA_PRIVATE_KEY"
 
-- Ensure `.env` file exists and contains valid credentials
+- Ensure `.env` file exists in the project root
+- Verify the file contains valid credentials
+- Check that variable names match exactly (case-sensitive)
 
-### "Topic creation failed"
+### "Failed to create new message box"
 
 - Verify your account has sufficient HBAR balance
-- Check network connectivity
+- Check network connectivity to Hedera network
+- Ensure you're using the correct network (testnet/mainnet)
 
-### "Cannot decrypt message"
+### "Message box ID not found for account"
 
-- The message may be encrypted with a different public key
-- Run the listener - it will detect the key mismatch and offer to create a new topic
-- Alternatively, restore the original RSA keys to the `data/` folder
+- The target account hasn't set up a message box yet
+- The account memo doesn't contain a valid HIP-9999 format: `[HIP-9999:0.0.xxxxx]`
+- Ask the recipient to run `npm run setup-message-box` first
 
-### "Key verification failed"
+### "Cannot decrypt message" or "Encrypted message (cannot decrypt)"
 
-- Your local RSA keys don't match the public key in the topic
-- This happens if keys were regenerated or replaced
-- The listener will prompt you to create a new topic with the current keys
+- The message may be encrypted with a different public key than your current one
+- This happens if you regenerated your RSA keys after setting up the message box
+- Run `npm run setup-message-box` to verify keys or create a new message box
+
+### "Key verification failed" or "Your keys cannot decrypt messages"
+
+- Your local RSA keys don't match the public key published in the topic
+- This happens if:
+  - You regenerated keys by deleting `data/rsa_*.pem` files
+  - You're using the same account on a different machine
+  - You restored from backup with different keys
+- Solutions:
+  - Restore the original RSA keys to the `data/` folder, or
+  - Create a new message box with your current keys (will get a new topic ID)
+
+### "Cannot read properties of undefined (reading 'forEach')"
+
+- This was a bug in earlier versions (now fixed)
+- The `listenForMessages` function wasn't properly returning a Promise
+- Update to the latest version of the code
+
+### Mirror Node Connection Issues
+
+If you see repeated "Mirror Node error" messages:
+
+- Check your internet connection
+- Verify `MIRROR_NODE_URL` in `.env` matches your network
+- Testnet: `https://testnet.mirrornode.hedera.com`
+- Mainnet: `https://mainnet.mirrornode.hedera.com`
+- Check Hedera network status: <https://status.hedera.com/>
 
 ## License
 
