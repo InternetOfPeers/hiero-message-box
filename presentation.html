@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hiero Message Box - Interactive Flow Presentation</title>
+    <title>Hiero Message Box - Secure Async Communication</title>
     <style>
       * {
         margin: 0;
@@ -14,155 +14,355 @@
       body {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        overflow-x: hidden;
         color: #fff;
-        overflow: hidden;
       }
 
       .container {
-        width: 100vw;
-        height: 100vh;
         display: flex;
-        flex-direction: column;
+        justify-content: space-between;
         align-items: center;
-        justify-content: center;
+        min-height: 100vh;
+        padding: 40px;
         position: relative;
       }
 
-      .slide {
-        display: none;
-        width: 90%;
-        max-width: 1200px;
-        height: 80vh;
-        padding: 40px;
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-radius: 20px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        animation: slideIn 0.5s ease-out;
-      }
-
-      .slide.active {
-        display: flex;
-        flex-direction: column;
-      }
-
-      @keyframes slideIn {
-        from {
-          opacity: 0;
-          transform: translateY(50px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      h1 {
-        font-size: 3em;
-        margin-bottom: 20px;
+      .header {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
         text-align: center;
+        z-index: 100;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 10px;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
       }
 
-      h2 {
-        font-size: 2em;
-        margin-bottom: 30px;
-        text-align: center;
-        color: #ffd700;
+      .header .subtitle {
+        font-size: 1.2rem;
+        opacity: 0.9;
       }
 
-      .content {
+      .actor {
         flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-      }
-
-      /* Navigation */
-      .nav {
-        position: fixed;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
-        display: flex;
-        gap: 20px;
-        z-index: 1000;
-      }
-
-      button {
-        padding: 12px 30px;
-        font-size: 16px;
-        border: none;
-        border-radius: 25px;
-        background: rgba(255, 255, 255, 0.2);
-        color: #fff;
-        cursor: pointer;
-        transition: all 0.3s;
-        backdrop-filter: blur(10px);
-      }
-
-      button:hover {
-        background: rgba(255, 255, 255, 0.3);
-        transform: scale(1.05);
-      }
-
-      .slide-counter {
-        position: fixed;
-        top: 20px;
-        right: 30px;
-        font-size: 18px;
-        background: rgba(255, 255, 255, 0.2);
-        padding: 10px 20px;
-        border-radius: 20px;
-        backdrop-filter: blur(10px);
-      }
-
-      /* Flow diagrams */
-      .flow-container {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 20px;
-        width: 100%;
+        justify-content: center;
+        gap: 30px;
+        z-index: 2;
       }
 
-      .flow-row {
+      .actor-icon {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: linear-gradient(145deg, #ffffff, #e6e6e6);
         display: flex;
         align-items: center;
-        gap: 30px;
-        animation: fadeInUp 0.8s ease-out forwards;
-        opacity: 0;
+        justify-content: center;
+        font-size: 60px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        position: relative;
       }
 
-      @keyframes fadeInUp {
-        to {
-          opacity: 1;
-          transform: translateY(0);
+      .actor-name {
+        font-size: 1.8rem;
+        font-weight: 600;
+        margin-top: -10px;
+      }
+
+      .network {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        position: relative;
+      }
+
+      .network-container {
+        position: relative;
+        width: 280px;
+        height: 280px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .network-world {
+        width: 220px;
+        height: 220px;
+        background: linear-gradient(145deg, #4caf50, #45a049);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 120px;
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+        position: relative;
+        overflow: hidden;
+        z-index: 2;
+      }
+
+      .network-world::before {
+        content: '';
+        position: absolute;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(
+          45deg,
+          transparent,
+          rgba(255, 255, 255, 0.1),
+          transparent
+        );
+        animation: shimmer 3s infinite;
+      }
+
+      @keyframes shimmer {
+        0% {
+          transform: translateX(-100%) translateY(-100%) rotate(45deg);
+        }
+        100% {
+          transform: translateX(100%) translateY(100%) rotate(45deg);
         }
       }
 
-      .box {
-        background: rgba(255, 255, 255, 0.2);
-        padding: 20px 30px;
-        border-radius: 15px;
-        min-width: 200px;
+      .network-world::after {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        border: 3px dashed rgba(255, 255, 255, 0.3);
+        animation: rotate 20s linear infinite;
+      }
+
+      @keyframes rotate {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .network-node {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(145deg, #4caf50, #45a049);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 30px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        z-index: 2;
+      }
+
+      .network-node::before {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: rgba(76, 175, 80, 0.3);
+        animation: nodePulse 2s infinite;
+      }
+
+      @keyframes nodePulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 0.5;
+        }
+        50% {
+          transform: scale(1.4);
+          opacity: 0;
+        }
+      }
+
+      .node-center {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+      .node-top {
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .node-right {
+        top: 50%;
+        right: 10px;
+        transform: translateY(-50%);
+      }
+      .node-bottom {
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .node-left {
+        top: 50%;
+        left: 10px;
+        transform: translateY(-50%);
+      }
+
+      .network-connection {
+        position: absolute;
+        height: 2px;
+        background: linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0.2),
+          rgba(255, 255, 255, 0.4),
+          rgba(255, 255, 255, 0.2)
+        );
+        transform-origin: center;
+        z-index: 1;
+      }
+
+      .nc-1 {
+        top: 30%;
+        left: 50%;
+        width: 80px;
+        transform: translateX(-50%) rotate(45deg);
+      }
+      .nc-2 {
+        top: 50%;
+        left: 50%;
+        width: 120px;
+        transform: translateX(-50%);
+      }
+      .nc-3 {
+        top: 70%;
+        left: 50%;
+        width: 80px;
+        transform: translateX(-50%) rotate(-45deg);
+      }
+      .nc-4 {
+        top: 50%;
+        left: 30%;
+        width: 100px;
+        transform: translateY(-50%) rotate(90deg);
+      }
+
+      .network-icon {
+        width: 200px;
+        height: 200px;
+        background: linear-gradient(145deg, #4caf50, #45a049);
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 100px;
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+        position: relative;
+        overflow: hidden;
+        display: none;
+      }
+
+      .network-icon::before {
+        content: '';
+        position: absolute;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(
+          45deg,
+          transparent,
+          rgba(255, 255, 255, 0.1),
+          transparent
+        );
+        animation: shimmer 3s infinite;
+      }
+
+      @keyframes shimmer {
+        0% {
+          transform: translateX(-100%) translateY(-100%) rotate(45deg);
+        }
+        100% {
+          transform: translateX(100%) translateY(100%) rotate(45deg);
+        }
+      }
+
+      .network-label {
+        font-size: 1.5rem;
+        font-weight: 600;
         text-align: center;
-        backdrop-filter: blur(10px);
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        transition: all 0.3s;
       }
 
-      .box:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+      .message-box {
+        width: 250px;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        transform: scale(0);
+        transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        color: #333;
       }
 
-      .box.highlight {
-        background: rgba(255, 215, 0, 0.3);
-        border-color: #ffd700;
-        animation: pulse 2s infinite;
+      .message-box.show {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      .key-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 10px 0;
+        padding: 10px;
+        background: #f5f5f5;
+        border-radius: 8px;
+      }
+
+      .key-icon {
+        font-size: 24px;
+      }
+
+      .key-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #666;
+      }
+
+      .message {
+        position: absolute;
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(145deg, #2196f3, #1976d2);
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        z-index: 10;
+      }
+
+      .message.show {
+        opacity: 1;
+      }
+
+      .encrypted {
+        background: linear-gradient(145deg, #ff9800, #f57c00);
+        position: relative;
+      }
+
+      .lock-overlay {
+        position: absolute;
+        font-size: 50px;
+        animation: pulse 1s infinite;
       }
 
       @keyframes pulse {
@@ -171,680 +371,1169 @@
           transform: scale(1);
         }
         50% {
-          transform: scale(1.05);
+          transform: scale(1.1);
         }
       }
 
-      .arrow {
-        font-size: 30px;
-        color: #ffd700;
-        animation: bounce 1s infinite;
-      }
-
-      @keyframes bounce {
-        0%,
-        100% {
-          transform: translateX(0);
-        }
-        50% {
-          transform: translateX(10px);
-        }
-      }
-
-      .arrow-down {
-        font-size: 30px;
-        color: #ffd700;
-        animation: bounceDown 1s infinite;
-      }
-
-      @keyframes bounceDown {
-        0%,
-        100% {
-          transform: translateY(0);
-        }
-        50% {
-          transform: translateY(10px);
-        }
-      }
-
-      /* Grid layout for overview */
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 30px;
-        width: 100%;
-        max-width: 1000px;
-      }
-
-      .card {
-        background: rgba(255, 255, 255, 0.2);
-        padding: 30px;
-        border-radius: 15px;
-        backdrop-filter: blur(10px);
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        transition: all 0.3s;
-        animation: fadeIn 0.8s ease-out forwards;
-        opacity: 0;
-      }
-
-      @keyframes fadeIn {
-        to {
-          opacity: 1;
-        }
-      }
-
-      .card:hover {
-        transform: translateY(-10px);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-      }
-
-      .card h3 {
-        font-size: 1.5em;
-        margin-bottom: 15px;
-        color: #ffd700;
-      }
-
-      .card p {
-        line-height: 1.6;
-        font-size: 0.95em;
-      }
-
-      /* Encryption visualization */
-      .encryption-flow {
-        display: flex;
-        flex-direction: column;
-        gap: 30px;
-        width: 100%;
-        max-width: 800px;
-      }
-
-      .encryption-step {
-        display: flex;
-        align-items: center;
-        gap: 20px;
-        animation: slideInRight 0.8s ease-out forwards;
-        opacity: 0;
-      }
-
-      @keyframes slideInRight {
-        from {
-          opacity: 0;
-          transform: translateX(-50px);
-        }
-        to {
-          opacity: 1;
-          transform: translateX(0);
-        }
-      }
-
-      .step-number {
-        width: 50px;
-        height: 50px;
-        background: #ffd700;
-        color: #667eea;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.5em;
-        font-weight: bold;
-        flex-shrink: 0;
-      }
-
-      .step-content {
-        flex: 1;
-        background: rgba(255, 255, 255, 0.2);
-        padding: 20px;
-        border-radius: 10px;
-        backdrop-filter: blur(10px);
-      }
-
-      .step-content h4 {
-        color: #ffd700;
-        margin-bottom: 10px;
-      }
-
-      /* Message animation */
-      .message-animation {
-        position: relative;
-        width: 100%;
-        height: 400px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 50px;
-      }
-
-      .actor {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 15px;
-      }
-
-      .actor-icon {
-        width: 100px;
-        height: 100px;
-        background: rgba(255, 255, 255, 0.3);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 3em;
-        border: 3px solid #ffd700;
-      }
-
-      .actor-label {
-        font-size: 1.2em;
-        font-weight: bold;
-      }
-
-      .message-path {
+      .connection-line {
         position: absolute;
+        height: 3px;
+        background: linear-gradient(90deg, transparent, #fff, transparent);
+        opacity: 0;
+        z-index: 1;
+      }
+
+      .connection-line.show {
+        opacity: 0.6;
+        animation: flowLine 2s ease-in-out;
+      }
+
+      @keyframes flowLine {
+        0% {
+          width: 0;
+        }
+        100% {
+          width: 100%;
+        }
+      }
+
+      .status-text {
+        position: absolute;
+        bottom: 100px;
         left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        width: 60%;
-        height: 2px;
-        background: #ffd700;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.7);
+        padding: 15px 30px;
+        border-radius: 25px;
+        font-size: 1.3rem;
+        text-align: center;
+        max-width: 80%;
+        opacity: 0;
+        transition: opacity 0.5s;
       }
 
-      .message-packet {
+      .status-text.show {
+        opacity: 1;
+      }
+
+      .click-hint {
         position: absolute;
-        left: 20%;
-        top: 50%;
-        transform: translate(-50%, -50%);
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(255, 255, 255, 0.2);
+        padding: 12px 25px;
+        border-radius: 20px;
+        font-size: 1rem;
+        opacity: 0.8;
+        animation: fadeInOut 2s infinite;
+        cursor: pointer;
+      }
+
+      @keyframes fadeInOut {
+        0%,
+        100% {
+          opacity: 0.5;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      .transaction {
+        position: absolute;
         width: 60px;
         height: 60px;
-        background: #ffd700;
-        border-radius: 10px;
+        background: linear-gradient(145deg, #9c27b0, #7b1fa2);
+        border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 2em;
-        animation: moveMessage 3s ease-in-out infinite;
+        font-size: 30px;
+        box-shadow: 0 5px 20px rgba(156, 39, 176, 0.5);
+        opacity: 0;
+        z-index: 15;
+      }
+
+      .transaction.show {
+        opacity: 1;
+      }
+
+      .network-message-box {
+        position: absolute;
+        width: 160px;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        opacity: 0;
+        transform: scale(0);
+        transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        color: #333;
+        z-index: 20;
+        bottom: 0%;
+        left: -5%;
+      }
+
+      .network-message-box.show {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      .network-account {
+        position: absolute;
+        width: 160px;
+        background: rgba(173, 216, 230, 0.95);
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        opacity: 0;
+        transform: scale(0);
+        transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        color: #333;
+        z-index: 20;
+        top: 0%;
+        right: -5%;
+      }
+
+      .network-account.show {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      .network-message-box .key-item,
+      .network-account .key-item {
+        margin: 5px 0;
+        padding: 8px;
+        font-size: 0.8rem;
+      }
+
+      .network-message-box .key-icon,
+      .network-account .key-icon {
+        font-size: 18px;
+      }
+
+      .public-key-flying {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(145deg, #ffd700, #ffa500);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 30px;
+        box-shadow: 0 5px 20px rgba(255, 215, 0, 0.5);
+        opacity: 0;
+        z-index: 25;
+      }
+
+      .public-key-flying.show {
+        opacity: 1;
+      }
+
+      .magnifying-glass {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(145deg, #e3f2fd, #bbdefb);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 35px;
+        box-shadow: 0 5px 20px rgba(33, 150, 243, 0.5);
+        opacity: 0;
+        z-index: 25;
+      }
+
+      .magnifying-glass.show {
+        opacity: 1;
+      }
+
+      .aes-key {
+        position: absolute;
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(145deg, #00bcd4, #0097a7);
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 35px;
+        box-shadow: 0 5px 20px rgba(0, 188, 212, 0.5);
+        opacity: 0;
+        z-index: 15;
+        transform: rotate(0deg);
+      }
+
+      .aes-key.show {
+        opacity: 1;
+      }
+
+      .plain-message {
+        position: absolute;
+        padding: 12px 18px;
+        background: linear-gradient(145deg, #fff, #f0f0f0);
+        border-radius: 12px;
+        color: #333;
+        font-size: 1rem;
+        font-weight: 600;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        z-index: 15;
+      }
+
+      .plain-message.show {
+        opacity: 1;
+      }
+
+      .encrypted-payload {
+        position: absolute;
+        width: 90px;
+        height: 90px;
+        background: linear-gradient(145deg, #9c27b0, #7b1fa2);
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 45px;
+        box-shadow: 0 8px 25px rgba(156, 39, 176, 0.6);
+        opacity: 0;
+        z-index: 25;
+      }
+
+      .encrypted-payload.show {
+        opacity: 1;
+      }
+
+      .merge-animation {
+        animation: mergeItems 1s ease-in-out;
+      }
+
+      @keyframes mergeItems {
+        0% {
+          transform: scale(1) rotate(0deg);
+        }
+        50% {
+          transform: scale(1.3) rotate(180deg);
+          opacity: 0.5;
+        }
+        100% {
+          transform: scale(1) rotate(360deg);
+        }
+      }
+
+      @keyframes mergeItemsCentered {
+        0% {
+          transform: translateX(-50%) scale(1) rotate(0deg);
+        }
+        50% {
+          transform: translateX(-50%) scale(1.3) rotate(180deg);
+          opacity: 0.5;
+        }
+        100% {
+          transform: translateX(-50%) scale(1) rotate(360deg);
+        }
+      }
+
+      .listening-indicator {
+        position: absolute;
+        width: 140px;
+        height: 140px;
+        border: 3px solid rgba(76, 175, 80, 0.6);
+        border-radius: 50%;
+        top: -10px;
+        left: -10px;
+        opacity: 0;
+      }
+
+      .listening-indicator.active {
+        opacity: 1;
+        animation: radar 2s infinite;
+      }
+
+      @keyframes radar {
+        0% {
+          transform: scale(1);
+          opacity: 0.6;
+        }
+        100% {
+          transform: scale(1.3);
+          opacity: 0;
+        }
+      }
+
+      .lookup-beam {
+        position: absolute;
+        height: 4px;
+        background: linear-gradient(90deg, #2196f3, transparent);
+        opacity: 0;
+        z-index: 1;
+      }
+
+      .lookup-beam.active {
+        opacity: 1;
+        animation: lookup 1.5s ease-in-out;
+      }
+
+      @keyframes lookup {
+        0% {
+          width: 0;
+          opacity: 1;
+        }
+        50% {
+          width: 100%;
+          opacity: 1;
+        }
+        100% {
+          width: 100%;
+          opacity: 0;
+        }
+      }
+
+      .encryption-animation {
+        position: absolute;
+        opacity: 0;
+      }
+
+      .encryption-animation.active {
+        opacity: 1;
+        animation: encrypt 1.5s ease-in-out;
+      }
+
+      @keyframes encrypt {
+        0% {
+          transform: scale(1) rotate(0deg);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1.5) rotate(180deg);
+          opacity: 0.5;
+        }
+        100% {
+          transform: scale(1) rotate(360deg);
+          opacity: 1;
+        }
+      }
+
+      .progress-bar {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4caf50, #8bc34a);
+        width: 0%;
+        transition: width 0.5s;
+        box-shadow: 0 0 10px rgba(76, 175, 80, 0.8);
       }
 
       @keyframes moveMessage {
-        0%,
+        0% {
+          transform: translate(0, 0);
+        }
         100% {
-          left: 20%;
+          transform: translate(var(--tx), var(--ty));
+        }
+      }
+
+      .particle {
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        background: #fff;
+        border-radius: 50%;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      @keyframes particleFloat {
+        0% {
+          transform: translate(0, 0) scale(1);
           opacity: 1;
         }
-        50% {
-          left: 80%;
-          opacity: 1;
+        100% {
+          transform: translate(var(--px), var(--py)) scale(0);
+          opacity: 0;
         }
-      }
-
-      .code-block {
-        background: rgba(0, 0, 0, 0.3);
-        padding: 20px;
-        border-radius: 10px;
-        font-family: 'Courier New', monospace;
-        font-size: 0.9em;
-        max-width: 800px;
-        margin: 20px auto;
-        text-align: left;
-        overflow-x: auto;
-      }
-
-      .code-block code {
-        color: #ffd700;
-      }
-
-      /* Delay animations for staggered effect */
-      .flow-row:nth-child(1) {
-        animation-delay: 0.1s;
-      }
-      .flow-row:nth-child(2) {
-        animation-delay: 0.3s;
-      }
-      .flow-row:nth-child(3) {
-        animation-delay: 0.5s;
-      }
-      .flow-row:nth-child(4) {
-        animation-delay: 0.7s;
-      }
-      .flow-row:nth-child(5) {
-        animation-delay: 0.9s;
-      }
-
-      .card:nth-child(1) {
-        animation-delay: 0.1s;
-      }
-      .card:nth-child(2) {
-        animation-delay: 0.3s;
-      }
-      .card:nth-child(3) {
-        animation-delay: 0.5s;
-      }
-      .card:nth-child(4) {
-        animation-delay: 0.7s;
-      }
-      .card:nth-child(5) {
-        animation-delay: 0.9s;
-      }
-      .card:nth-child(6) {
-        animation-delay: 1.1s;
-      }
-
-      .encryption-step:nth-child(1) {
-        animation-delay: 0.2s;
-      }
-      .encryption-step:nth-child(2) {
-        animation-delay: 0.5s;
-      }
-      .encryption-step:nth-child(3) {
-        animation-delay: 0.8s;
-      }
-      .encryption-step:nth-child(4) {
-        animation-delay: 1.1s;
-      }
-
-      /* Responsive */
-      @media (max-width: 768px) {
-        h1 {
-          font-size: 2em;
-        }
-        h2 {
-          font-size: 1.5em;
-        }
-        .grid {
-          grid-template-columns: 1fr;
-        }
-        .flow-row {
-          flex-direction: column;
-        }
-        .arrow {
-          transform: rotate(90deg);
-        }
-      }
-
-      .list {
-        text-align: left;
-        max-width: 600px;
-        margin: 20px auto;
-        line-height: 2;
-      }
-
-      .list li {
-        margin-bottom: 10px;
-        font-size: 1.1em;
-      }
-
-      .emoji {
-        font-size: 1.5em;
-        margin-right: 10px;
       }
     </style>
   </head>
   <body>
-    <div class="container">
-      <div class="slide-counter">
-        <span id="current-slide">1</span> / <span id="total-slides">8</span>
-      </div>
+    <div class="header">
+      <h1>🔐 Hiero Message Box</h1>
+      <div class="subtitle">Secure Async Communication on Hedera</div>
+    </div>
 
-      <!-- Slide 1: Title -->
-      <div class="slide active">
-        <div class="content">
-          <div style="text-align: center">
-            <h1>🔐 Hiero Message Box</h1>
-            <h2>Encrypted Asynchronous Messaging on Hedera</h2>
-            <div style="margin-top: 50px; font-size: 1.3em; line-height: 2">
-              <p>✉️ Send encrypted messages securely</p>
-              <p>🔒 Hybrid AES-256 + RSA-2048 encryption</p>
-              <p>⚡ Built on Hedera Consensus Service</p>
-            </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <div class="container" id="container">
+      <!-- Alice (Receiver) -->
+      <div class="actor" id="alice">
+        <div class="actor-icon">
+          <span>👩‍💻</span>
+          <div class="listening-indicator" id="listeningIndicator"></div>
+        </div>
+        <div class="actor-name">Alice</div>
+        <div class="message-box" id="aliceMessageBox">
+          <div class="key-item">
+            <span class="key-icon">🔑</span>
+            <span class="key-label">RSA Public Key</span>
+          </div>
+          <div class="key-item">
+            <span class="key-icon">🔒</span>
+            <span class="key-label">RSA Private Key</span>
           </div>
         </div>
       </div>
 
-      <!-- Slide 2: System Overview -->
-      <div class="slide">
-        <h2>System Overview</h2>
-        <div class="content">
-          <div class="message-animation">
-            <div class="actor">
-              <div class="actor-icon">👤</div>
-              <div class="actor-label">Sender</div>
-            </div>
-            <div class="message-path"></div>
-            <div class="message-packet">📧</div>
-            <div class="actor">
-              <div class="actor-icon">👤</div>
-              <div class="actor-label">Receiver</div>
-            </div>
+      <!-- Hedera Network -->
+      <div class="network" id="network">
+        <div class="network-container" id="networkContainer">
+          <!-- World representation of Hedera Network -->
+          <div class="network-world">
+            <span>🌍</span>
           </div>
-          <div class="flow-row">
-            <div class="box">1. Lookup recipient's message box</div>
-            <div class="arrow">→</div>
-            <div class="box">2. Encrypt with recipient's public key</div>
-            <div class="arrow">→</div>
-            <div class="box">3. Submit to HCS topic</div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Slide 3: Setup Flow -->
-      <div class="slide">
-        <h2>📦 Setup Message Box</h2>
-        <div class="content">
-          <div class="flow-container">
-            <div class="flow-row">
-              <div class="box">Generate RSA Key Pair<br />🔑 (2048-bit)</div>
+          <!-- Message box stored in network (top) -->
+          <div class="network-message-box" id="networkMessageBox">
+            <div class="key-item">
+              <span class="key-icon">📬</span>
+              <span class="key-label">Message Box</span>
             </div>
-            <div class="arrow-down">↓</div>
-            <div class="flow-row">
-              <div class="box">Create Hedera Topic<br />📋 (Message Box)</div>
+            <div class="key-item">
+              <span class="key-icon">🔑</span>
+              <span class="key-label">RSA Public Key</span>
             </div>
-            <div class="arrow-down">↓</div>
-            <div class="flow-row">
-              <div class="box">Publish Public Key<br />🔓 (First message)</div>
+          </div>
+
+          <!-- Account stored in network (bottom) -->
+          <div class="network-account" id="networkAccount">
+            <div class="key-item">
+              <span class="key-icon">👤</span>
+              <span class="key-label">Alice's Account</span>
             </div>
-            <div class="arrow-down">↓</div>
-            <div class="flow-row">
-              <div class="box">
-                Update Account Memo<br />📝 [HIP-9999:0.0.xxxxx]
-              </div>
-            </div>
-            <div class="arrow-down">↓</div>
-            <div class="flow-row">
-              <div class="box highlight">✅ Ready to Receive Messages!</div>
+            <div class="key-item">
+              <span class="key-icon">🔗</span>
+              <span class="key-label">→ Message Box ID</span>
             </div>
           </div>
         </div>
+        <div class="network-label">Hedera Network</div>
       </div>
-
-      <!-- Slide 4: Sending Messages -->
-      <div class="slide">
-        <h2>📤 Sending Messages</h2>
-        <div class="content">
-          <div class="encryption-flow">
-            <div class="encryption-step">
-              <div class="step-number">1</div>
-              <div class="step-content">
-                <h4>Lookup Recipient</h4>
-                <p>
-                  Read account memo → Extract topic ID from [HIP-9999:0.0.xxxxx]
-                </p>
-              </div>
-            </div>
-            <div class="encryption-step">
-              <div class="step-number">2</div>
-              <div class="step-content">
-                <h4>Get Public Key</h4>
-                <p>
-                  Query topic via Mirror Node API → Retrieve public key from
-                  first message
-                </p>
-              </div>
-            </div>
-            <div class="encryption-step">
-              <div class="step-number">3</div>
-              <div class="step-content">
-                <h4>Encrypt Message</h4>
-                <p>
-                  Generate random AES key → Encrypt message → Encrypt AES key
-                  with RSA
-                </p>
-              </div>
-            </div>
-            <div class="encryption-step">
-              <div class="step-number">4</div>
-              <div class="step-content">
-                <h4>Submit to Topic</h4>
-                <p>
-                  Package encrypted data → Submit to HCS topic → Auto-chunked if
-                  > 1KB
-                </p>
-              </div>
-            </div>
+      <!-- Bob (Sender) -->
+      <div class="actor" id="bob">
+        <div class="actor-icon">
+          <span>👨‍💻</span>
+        </div>
+        <div class="actor-name">Bob</div>
+        <div class="message-box" id="bobInfo" style="opacity: 0">
+          <div class="key-item">
+            <span class="key-icon">🔑</span>
+            <span class="key-label">Alice's Public Key</span>
+          </div>
+          <div class="key-item">
+            <span class="key-icon">🆔</span>
+            <span class="key-label">Alice's Message Box (Topic ID)</span>
           </div>
         </div>
-      </div>
-
-      <!-- Slide 5: Hybrid Encryption -->
-      <div class="slide">
-        <h2>🔐 Hybrid Encryption (AES + RSA)</h2>
-        <div class="content">
-          <div style="width: 100%; max-width: 900px">
-            <div class="flow-container">
-              <div class="flow-row">
-                <div class="box" style="min-width: 300px">
-                  📝 Plain Message<br />
-                  <code>"Hello, secret!"</code>
-                </div>
-              </div>
-              <div class="arrow-down">↓</div>
-              <div class="flow-row">
-                <div class="box" style="background: rgba(255, 215, 0, 0.2)">
-                  🔑 Generate Random<br />AES-256 Key + IV
-                </div>
-              </div>
-              <div class="arrow-down">↓</div>
-              <div class="flow-row">
-                <div class="box">
-                  🔒 Encrypt Message<br />
-                  <small>AES-256-CBC (fast)</small>
-                </div>
-                <div class="box">
-                  🔐 Encrypt AES Key<br />
-                  <small>RSA-2048-OAEP (secure)</small>
-                </div>
-              </div>
-              <div class="arrow-down">↓</div>
-              <div class="flow-row">
-                <div class="box highlight" style="min-width: 400px">
-                  📦 Encrypted Package<br />
-                  {encryptedData, encryptedKey, iv}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Slide 6: Receiving Messages -->
-      <div class="slide">
-        <h2>📥 Receiving Messages</h2>
-        <div class="content">
-          <div class="encryption-flow">
-            <div class="encryption-step">
-              <div class="step-number">1</div>
-              <div class="step-content">
-                <h4>Poll Topic via Mirror Node</h4>
-                <p>
-                  Query for new messages every 3 seconds → Filter by sequence
-                  number
-                </p>
-              </div>
-            </div>
-            <div class="encryption-step">
-              <div class="step-number">2</div>
-              <div class="step-content">
-                <h4>Detect Format</h4>
-                <p>
-                  Automatically detect JSON or CBOR encoding → Parse message
-                  envelope
-                </p>
-              </div>
-            </div>
-            <div class="encryption-step">
-              <div class="step-number">3</div>
-              <div class="step-content">
-                <h4>Decrypt Message</h4>
-                <p>
-                  Decrypt AES key with RSA private key → Decrypt message with
-                  AES key
-                </p>
-              </div>
-            </div>
-            <div class="encryption-step">
-              <div class="step-number">4</div>
-              <div class="step-content">
-                <h4>Display & Track</h4>
-                <p>
-                  Show decrypted message → Update last sequence number →
-                  Continue polling
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Slide 7: Key Features -->
-      <div class="slide">
-        <h2>✨ Key Features</h2>
-        <div class="content">
-          <div class="grid">
-            <div class="card">
-              <h3>🔒 Secure</h3>
-              <p>
-                Hybrid encryption combines AES-256 speed with RSA-2048 security.
-                Only recipient can decrypt.
-              </p>
-            </div>
-            <div class="card">
-              <h3>⚡ Fast</h3>
-              <p>
-                Real-time polling every 3 seconds. Automatic format detection
-                and decoding.
-              </p>
-            </div>
-            <div class="card">
-              <h3>📦 Scalable</h3>
-              <p>
-                Supports messages of any size. Automatic chunking and reassembly
-                for messages > 1KB.
-              </p>
-            </div>
-            <div class="card">
-              <h3>🔍 Transparent</h3>
-              <p>
-                Public message box directory via account memos. Easy to find
-                recipients.
-              </p>
-            </div>
-            <div class="card">
-              <h3>🛠️ Simple</h3>
-              <p>
-                Just run npm commands. No complex configuration or setup
-                required.
-              </p>
-            </div>
-            <div class="card">
-              <h3>🌐 Decentralized</h3>
-              <p>
-                Built on Hedera Consensus Service. Immutable message log on
-                blockchain.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Slide 8: Usage -->
-      <div class="slide">
-        <h2>💻 How to Use</h2>
-        <div class="content">
-          <div style="text-align: left; max-width: 800px">
-            <div class="code-block">
-              <div style="margin-bottom: 20px">
-                <div
-                  style="color: #ffd700; font-weight: bold; margin-bottom: 10px"
-                >
-                  Setup (one-time):
-                </div>
-                <code>$ npm run setup-message-box</code>
-              </div>
-              <div style="margin-bottom: 20px">
-                <div
-                  style="color: #ffd700; font-weight: bold; margin-bottom: 10px"
-                >
-                  Listen for messages:
-                </div>
-                <code>$ npm run listen-for-new-messages</code>
-              </div>
-              <div style="margin-bottom: 20px">
-                <div
-                  style="color: #ffd700; font-weight: bold; margin-bottom: 10px"
-                >
-                  Send a message:
-                </div>
-                <code>$ npm run send-message -- 0.0.1441 "Hello!"</code>
-              </div>
-              <div>
-                <div
-                  style="color: #ffd700; font-weight: bold; margin-bottom: 10px"
-                >
-                  Check message history:
-                </div>
-                <code>$ npm run check-messages -- 5 10</code>
-              </div>
-            </div>
-            <ul class="list" style="margin-top: 40px">
-              <li>
-                <span class="emoji">🔑</span> Keys stored in
-                <code>data/</code> folder
-              </li>
-              <li><span class="emoji">📋</span> Topic ID in account memo</li>
-              <li><span class="emoji">🔐</span> End-to-end encrypted</li>
-              <li><span class="emoji">⚡</span> Built on Hedera HCS</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <!-- Navigation -->
-      <div class="nav">
-        <button id="prev-btn">← Previous</button>
-        <button id="next-btn">Next →</button>
       </div>
     </div>
 
+    <div class="status-text" id="statusText"></div>
+
+    <div class="click-hint" id="clickHint">👆 Click anywhere to start</div>
+
     <script>
-      let currentSlide = 0;
-      const slides = document.querySelectorAll('.slide');
-      const totalSlides = slides.length;
-      const prevBtn = document.getElementById('prev-btn');
-      const nextBtn = document.getElementById('next-btn');
-      const currentSlideSpan = document.getElementById('current-slide');
-      const totalSlidesSpan = document.getElementById('total-slides');
+      let currentScene = -1; // Start at -1 so first click goes to scene 0
+      let isAnimating = false;
+      const scenes = [
+        {
+          name: 'Scene 1: Alice Creates Message Box',
+          status:
+            '🎬 Alice creates a message box and updates her account to reference it',
+          duration: 5500,
+          action: scene1,
+        },
+        {
+          name: 'Scene 2: Bob Looks Up Alice',
+          status:
+            "🔍 Bob queries Alice's account and retrieves her message box's details",
+          duration: 4000,
+          action: scene2,
+        },
+        {
+          name: 'Scene 3: Bob Creates AES Key',
+          status:
+            "🔑 Bob generates an AES key and encrypts it with Alice's public key",
+          duration: 4500,
+          action: scene3,
+        },
+        {
+          name: 'Scene 4: Bob Encrypts Message',
+          status: '🔑 Bob writes and encrypts his message with the AES key',
+          duration: 4000,
+          action: scene4,
+        },
+        {
+          name: 'Scene 5: Bob Sends Payload',
+          status: "📦 Bob sends the encrypted payload to Alice's message box",
+          duration: 4000,
+          action: scene5,
+        },
+        {
+          name: 'Scene 6: Alice Receives & Decrypts',
+          status: '✅ Alice decrypts the AES key and reads the message',
+          duration: 4000,
+          action: scene6,
+        },
+      ];
 
-      totalSlidesSpan.textContent = totalSlides;
-
-      function showSlide(n) {
-        slides.forEach(slide => slide.classList.remove('active'));
-        currentSlide = (n + totalSlides) % totalSlides;
-        slides[currentSlide].classList.add('active');
-        currentSlideSpan.textContent = currentSlide + 1;
-
-        // Update button states
-        prevBtn.disabled = currentSlide === 0;
-        nextBtn.disabled = currentSlide === totalSlides - 1;
+      function updateStatus(text) {
+        const statusText = document.getElementById('statusText');
+        statusText.textContent = text;
+        statusText.classList.add('show');
       }
 
-      prevBtn.addEventListener('click', () => {
-        if (currentSlide > 0) showSlide(currentSlide - 1);
-      });
+      function updateProgress(percent) {
+        document.getElementById('progressFill').style.width = percent + '%';
+      }
 
-      nextBtn.addEventListener('click', () => {
-        if (currentSlide < totalSlides - 1) showSlide(currentSlide + 1);
-      });
+      function createParticles(x, y, count = 10) {
+        const container = document.getElementById('container');
+        for (let i = 0; i < count; i++) {
+          const particle = document.createElement('div');
+          particle.className = 'particle';
+          particle.style.left = x + 'px';
+          particle.style.top = y + 'px';
 
-      // Keyboard navigation
-      document.addEventListener('keydown', e => {
-        if (e.key === 'ArrowLeft') {
-          if (currentSlide > 0) showSlide(currentSlide - 1);
-        } else if (e.key === 'ArrowRight' || e.key === ' ') {
-          if (currentSlide < totalSlides - 1) showSlide(currentSlide + 1);
+          const angle = (Math.PI * 2 * i) / count;
+          const distance = 50 + Math.random() * 50;
+          const px = Math.cos(angle) * distance;
+          const py = Math.sin(angle) * distance;
+
+          particle.style.setProperty('--px', px + 'px');
+          particle.style.setProperty('--py', py + 'px');
+
+          container.appendChild(particle);
+
+          setTimeout(() => {
+            particle.style.animation = 'particleFloat 1s ease-out forwards';
+          }, 10);
+
+          setTimeout(() => {
+            particle.remove();
+          }, 1010);
+        }
+      }
+
+      function scene1() {
+        const messageBox = document.getElementById('aliceMessageBox');
+        const aliceIcon = document.querySelector('#alice .actor-icon');
+        const aliceRect = aliceIcon.getBoundingClientRect();
+        const networkContainer = document.getElementById('networkContainer');
+        const networkRect = networkContainer.getBoundingClientRect();
+        const networkMessageBox = document.getElementById('networkMessageBox');
+        const networkAccount = document.getElementById('networkAccount');
+        const container = document.getElementById('container');
+
+        // First, show Alice's local message box
+        messageBox.classList.add('show');
+        createParticles(
+          aliceRect.left + aliceRect.width / 2,
+          aliceRect.top + aliceRect.height / 2,
+          15
+        );
+
+        // TRANSACTION 1: Create message box
+        setTimeout(() => {
+          const transaction1 = document.createElement('div');
+          transaction1.className = 'transaction show';
+          transaction1.innerHTML = '📝';
+          transaction1.style.left =
+            aliceRect.left + aliceRect.width / 2 - 30 + 'px';
+          transaction1.style.top =
+            aliceRect.top + aliceRect.height / 2 - 30 + 'px';
+          transaction1.id = 'transaction1';
+          container.appendChild(transaction1);
+
+          // Animate first transaction to network (bottom left - message box area)
+          setTimeout(() => {
+            const startX = aliceRect.left + aliceRect.width / 2 - 30;
+            const startY = aliceRect.top + aliceRect.height / 2 - 30;
+            const endX = networkRect.left + 10;
+            const endY = networkRect.bottom - 100;
+
+            transaction1.style.setProperty('--tx', endX - startX + 'px');
+            transaction1.style.setProperty('--ty', endY - startY + 'px');
+            transaction1.style.animation =
+              'moveMessage 1.5s ease-in-out forwards';
+
+            // Message box appears in network
+            setTimeout(() => {
+              createParticles(endX + 30, endY + 30, 20);
+              transaction1.remove();
+
+              setTimeout(() => {
+                networkMessageBox.classList.add('show');
+                createParticles(
+                  networkRect.left + 70,
+                  networkRect.bottom - 50,
+                  25
+                );
+              }, 200);
+            }, 1500);
+          }, 100);
+        }, 800);
+
+        // TRANSACTION 2: Update account with reference to message box
+        setTimeout(() => {
+          const transaction2 = document.createElement('div');
+          transaction2.className = 'transaction show';
+          transaction2.innerHTML = '📝';
+          transaction2.style.left =
+            aliceRect.left + aliceRect.width / 2 - 30 + 'px';
+          transaction2.style.top =
+            aliceRect.top + aliceRect.height / 2 - 30 + 'px';
+          transaction2.id = 'transaction2';
+          container.appendChild(transaction2);
+
+          // Animate second transaction to network (top right - account area)
+          setTimeout(() => {
+            const startX = aliceRect.left + aliceRect.width / 2 - 30;
+            const startY = aliceRect.top + aliceRect.height / 2 - 30;
+            const endX = networkRect.right - 70;
+            const endY = networkRect.top + 10;
+
+            transaction2.style.setProperty('--tx', endX - startX + 'px');
+            transaction2.style.setProperty('--ty', endY - startY + 'px');
+            transaction2.style.animation =
+              'moveMessage 1.5s ease-in-out forwards';
+
+            // Account appears in network
+            setTimeout(() => {
+              createParticles(endX + 30, endY + 30, 20);
+              transaction2.remove();
+
+              setTimeout(() => {
+                networkAccount.classList.add('show');
+                createParticles(
+                  networkRect.right - 60,
+                  networkRect.top + 50,
+                  25
+                );
+              }, 200);
+            }, 1500);
+          }, 100);
+        }, 2800);
+      }
+
+      function scene2() {
+        const bobInfo = document.getElementById('bobInfo');
+        const bobIcon = document.querySelector('#bob .actor-icon');
+        const bobRect = bobIcon.getBoundingClientRect();
+        const networkRect = document
+          .querySelector('.network-container')
+          .getBoundingClientRect();
+        const networkAccount = document.getElementById('networkAccount');
+        const networkMessageBox = document.getElementById('networkMessageBox');
+        const container = document.getElementById('container');
+
+        // Bob uses magnifying glass to explore the network
+        const magnifyingGlass = document.createElement('div');
+        magnifyingGlass.className = 'magnifying-glass show';
+        magnifyingGlass.innerHTML = '🔍';
+        magnifyingGlass.id = 'magnifyingGlass';
+        magnifyingGlass.style.left =
+          bobRect.left + bobRect.width / 2 - 30 + 'px';
+        magnifyingGlass.style.top =
+          bobRect.top + bobRect.height / 2 - 30 + 'px';
+        container.appendChild(magnifyingGlass);
+
+        // Move magnifying glass to Alice's account (top right)
+        setTimeout(() => {
+          const startX = bobRect.left + bobRect.width / 2 - 30;
+          const startY = bobRect.top + bobRect.height / 2 - 30;
+          const accountX = networkRect.right - 60;
+          const accountY = networkRect.top + 50;
+
+          magnifyingGlass.style.setProperty('--tx', accountX - startX + 'px');
+          magnifyingGlass.style.setProperty('--ty', accountY - startY + 'px');
+          magnifyingGlass.style.animation =
+            'moveMessage 1s ease-in-out forwards';
+
+          // Highlight the account box when magnifying glass reaches it
+          setTimeout(() => {
+            networkAccount.style.boxShadow = '0 0 30px rgba(33, 150, 243, 0.8)';
+            networkAccount.style.transform = 'scale(1.1)';
+            createParticles(accountX + 30, accountY + 30, 15);
+          }, 1000);
+        }, 300);
+
+        // Move magnifying glass to message box (bottom left)
+        setTimeout(() => {
+          const accountX = networkRect.right - 60;
+          const accountY = networkRect.top + 50;
+          const messageBoxX = networkRect.left + 70;
+          const messageBoxY = networkRect.bottom - 50;
+
+          magnifyingGlass.style.left = accountX + 'px';
+          magnifyingGlass.style.top = accountY + 'px';
+          magnifyingGlass.style.animation = 'none';
+
+          // Reset account highlight
+          networkAccount.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.4)';
+          networkAccount.style.transform = 'scale(1)';
+
+          setTimeout(() => {
+            magnifyingGlass.style.setProperty(
+              '--tx',
+              messageBoxX - accountX + 'px'
+            );
+            magnifyingGlass.style.setProperty(
+              '--ty',
+              messageBoxY - accountY + 'px'
+            );
+            magnifyingGlass.style.animation =
+              'moveMessage 1s ease-in-out forwards';
+
+            // Highlight the message box when magnifying glass reaches it
+            setTimeout(() => {
+              networkMessageBox.style.boxShadow =
+                '0 0 30px rgba(33, 150, 243, 0.8)';
+              networkMessageBox.style.transform = 'scale(1.1)';
+              createParticles(messageBoxX + 30, messageBoxY + 30, 15);
+            }, 1000);
+          }, 100);
+        }, 1600);
+
+        // Remove magnifying glass and send public key to Bob
+        setTimeout(() => {
+          // Get the final position of magnifying glass (at message box)
+          const messageBoxX = networkRect.left + 70;
+          const messageBoxY = networkRect.bottom - 50;
+
+          magnifyingGlass.remove();
+
+          // Reset message box highlight
+          networkMessageBox.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.4)';
+          networkMessageBox.style.transform = 'scale(1)';
+
+          // Public key appears at magnifying glass's last position
+          const publicKey = document.createElement('div');
+          publicKey.className = 'public-key-flying show';
+          publicKey.innerHTML = '🔑';
+          publicKey.id = 'publicKeyFlying';
+          publicKey.style.left = messageBoxX + 'px';
+          publicKey.style.top = messageBoxY + 'px';
+          container.appendChild(publicKey);
+
+          // Animate key to Bob
+          setTimeout(() => {
+            const startX = messageBoxX;
+            const startY = messageBoxY;
+            const endX = bobRect.left + bobRect.width / 2 - 30;
+            const endY = bobRect.top + bobRect.height + 80;
+
+            publicKey.style.setProperty('--tx', endX - startX + 'px');
+            publicKey.style.setProperty('--ty', endY - startY + 'px');
+            publicKey.style.animation = 'moveMessage 1.5s ease-in-out forwards';
+
+            setTimeout(() => {
+              createParticles(endX + 30, endY + 30, 15);
+              publicKey.remove();
+
+              // Show Bob's info box
+              bobInfo.style.opacity = '1';
+              bobInfo.style.transform = 'scale(1)';
+              bobInfo.style.transition =
+                'all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+              createParticles(
+                bobRect.left + bobRect.width / 2,
+                bobRect.top + bobRect.height + 100,
+                12
+              );
+            }, 1500);
+          }, 100);
+        }, 2900);
+      }
+
+      function scene3() {
+        const container = document.getElementById('container');
+        const bobRect = document
+          .querySelector('#bob .actor-icon')
+          .getBoundingClientRect();
+
+        // Bob creates AES key
+        const aesKey = document.createElement('div');
+        aesKey.className = 'aes-key show';
+        aesKey.innerHTML = '🔐';
+        aesKey.id = 'aesKey';
+        aesKey.style.left = bobRect.left + bobRect.width / 2 - 35 + 'px';
+        aesKey.style.top = bobRect.top + bobRect.height + 50 + 'px';
+        container.appendChild(aesKey);
+
+        createParticles(
+          bobRect.left + bobRect.width / 2,
+          bobRect.top + bobRect.height + 85,
+          20
+        );
+
+        // Encrypt AES key with Alice's public key
+        setTimeout(() => {
+          aesKey.classList.add('merge-animation');
+
+          setTimeout(() => {
+            aesKey.classList.remove('merge-animation');
+            aesKey.style.background =
+              'linear-gradient(145deg, #FF9800, #F57C00)';
+            aesKey.innerHTML = '🔐📩';
+            createParticles(
+              bobRect.left + bobRect.width / 2,
+              bobRect.top + bobRect.height + 85,
+              25
+            );
+          }, 1000);
+        }, 1500);
+      }
+
+      function scene4() {
+        const container = document.getElementById('container');
+        const bobRect = document
+          .querySelector('#bob .actor-icon')
+          .getBoundingClientRect();
+        const aesKey = document.getElementById('aesKey');
+        const bobInfo = document.getElementById('bobInfo');
+        const bobInfoRect = bobInfo.getBoundingClientRect();
+
+        // Make Bob's info box less prominent (gray it out)
+        bobInfo.style.opacity = '0.3';
+        bobInfo.style.filter = 'grayscale(1)';
+        bobInfo.style.transition = 'all 0.5s ease';
+
+        // Bob writes a message - centered relative to Bob's info box
+        const plainMessage = document.createElement('div');
+        plainMessage.className = 'plain-message show';
+        plainMessage.textContent = '💕 I love you, Alice!';
+        plainMessage.id = 'plainMessage';
+        plainMessage.style.position = 'absolute';
+        plainMessage.style.whiteSpace = 'nowrap';
+        plainMessage.style.textAlign = 'center';
+        // Center horizontally relative to Bob's info box
+        plainMessage.style.left =
+          bobInfoRect.left + bobInfoRect.width / 2 + 'px';
+        plainMessage.style.top = bobRect.top + bobRect.height + 150 + 'px';
+        plainMessage.style.transform = 'translateX(-50%)';
+        container.appendChild(plainMessage);
+
+        createParticles(
+          bobRect.left + bobRect.width / 2,
+          bobRect.top + bobRect.height + 165,
+          15
+        );
+
+        // Encrypt message with AES key
+        setTimeout(() => {
+          // Use custom animation that preserves translateX(-50%)
+          plainMessage.style.animation = 'mergeItemsCentered 1s ease-in-out';
+
+          setTimeout(() => {
+            plainMessage.remove();
+
+            // Create encrypted payload
+            const encryptedPkg = document.createElement('div');
+            encryptedPkg.className = 'encrypted-payload show';
+            encryptedPkg.innerHTML = '📦';
+            encryptedPkg.id = 'encryptedPayload';
+            encryptedPkg.style.left =
+              bobRect.left + bobRect.width / 2 - 45 + 'px';
+            encryptedPkg.style.top = bobRect.top + bobRect.height + 100 + 'px';
+            container.appendChild(encryptedPkg);
+
+            createParticles(
+              bobRect.left + bobRect.width / 2,
+              bobRect.top + bobRect.height + 145,
+              30
+            );
+
+            // Remove AES key visual after packaging
+            if (aesKey) aesKey.remove();
+          }, 1000);
+        }, 1500);
+      }
+
+      function scene5() {
+        const encryptedPkg = document.getElementById('encryptedPayload');
+        const bobRect = document
+          .querySelector('#bob .actor-icon')
+          .getBoundingClientRect();
+        const networkRect = document
+          .querySelector('.network-container')
+          .getBoundingClientRect();
+        const networkMessageBox = document.getElementById('networkMessageBox');
+        const messageBoxRect = networkMessageBox.getBoundingClientRect();
+
+        const startX = bobRect.left + bobRect.width / 2 - 45;
+        const startY = bobRect.top + bobRect.height + 100;
+        // Target the top part of the message box (where "Message Box" text is)
+        const endX = messageBoxRect.left + messageBoxRect.width / 2 - 45;
+        const endY = messageBoxRect.top + 20;
+
+        encryptedPkg.style.setProperty('--tx', endX - startX + 'px');
+        encryptedPkg.style.setProperty('--ty', endY - startY + 'px');
+        encryptedPkg.style.animation = 'moveMessage 2s ease-in-out forwards';
+
+        setTimeout(() => {
+          createParticles(endX + 45, endY + 45, 25);
+
+          // Highlight message box receiving the payload (bottom left)
+          networkMessageBox.style.boxShadow =
+            '0 0 30px rgba(156, 39, 176, 0.8)';
+          networkMessageBox.style.transform = 'scale(1.1)';
+
+          setTimeout(() => {
+            networkMessageBox.style.boxShadow =
+              '0 10px 30px rgba(0, 0, 0, 0.4)';
+            networkMessageBox.style.transform = 'scale(1)';
+          }, 1000);
+        }, 2000);
+      }
+
+      function scene6() {
+        const encryptedPkg = document.getElementById('encryptedPayload');
+        const networkRect = document
+          .querySelector('.network-container')
+          .getBoundingClientRect();
+        const networkMessageBox = document.getElementById('networkMessageBox');
+        const messageBoxRect = networkMessageBox.getBoundingClientRect();
+        const aliceRect = document
+          .querySelector('#alice .actor-icon')
+          .getBoundingClientRect();
+        const listening = document.getElementById('listeningIndicator');
+        const container = document.getElementById('container');
+
+        listening.classList.add('active');
+
+        // Payload moves from message box (top of the box where "Message Box" text is) to Alice
+        const startX = messageBoxRect.left + messageBoxRect.width / 2 - 45;
+        const startY = messageBoxRect.top + 20;
+        const endX = aliceRect.left + aliceRect.width / 2 - 45;
+        const endY = aliceRect.top + aliceRect.height + 50;
+
+        encryptedPkg.style.left = startX + 'px';
+        encryptedPkg.style.top = startY + 'px';
+        encryptedPkg.style.animation = 'none';
+
+        setTimeout(() => {
+          encryptedPkg.style.setProperty('--tx', endX - startX + 'px');
+          encryptedPkg.style.setProperty('--ty', endY - startY + 'px');
+          encryptedPkg.style.animation = 'moveMessage 2s ease-in-out forwards';
+        }, 100);
+
+        setTimeout(() => {
+          listening.classList.remove('active');
+          createParticles(endX + 45, endY + 45, 20);
+
+          // Alice decrypts the payload
+          setTimeout(() => {
+            encryptedPkg.classList.add('merge-animation');
+
+            setTimeout(() => {
+              encryptedPkg.remove();
+
+              // Show decrypted AES key
+              const decryptedAes = document.createElement('div');
+              decryptedAes.className = 'aes-key show';
+              decryptedAes.innerHTML = '�';
+              decryptedAes.style.left = endX + 'px';
+              decryptedAes.style.top = endY + 'px';
+              decryptedAes.style.background =
+                'linear-gradient(145deg, #8BC34A, #689F38)';
+              decryptedAes.id = 'decryptedAes';
+              container.appendChild(decryptedAes);
+
+              createParticles(endX + 35, endY + 35, 20);
+
+              // Decrypt and show message
+              setTimeout(() => {
+                decryptedAes.classList.add('merge-animation');
+
+                setTimeout(() => {
+                  decryptedAes.remove();
+
+                  // Gray out Alice's message box for better readability
+                  const aliceMessageBox =
+                    document.getElementById('aliceMessageBox');
+                  const aliceMessageBoxRect =
+                    aliceMessageBox.getBoundingClientRect();
+                  aliceMessageBox.style.opacity = '0.3';
+                  aliceMessageBox.style.filter = 'grayscale(1)';
+                  aliceMessageBox.style.transition = 'all 0.5s ease';
+
+                  // Show final decrypted message - centered relative to Alice's message box
+                  const decrypted = document.createElement('div');
+                  decrypted.style.position = 'absolute';
+                  decrypted.style.left =
+                    aliceMessageBoxRect.left +
+                    aliceMessageBoxRect.width / 2 +
+                    'px';
+                  decrypted.style.transform = 'translateX(-50%) scale(0)';
+                  decrypted.style.top = endY + 100 + 'px';
+                  decrypted.style.background = 'rgba(255,255,255,0.95)';
+                  decrypted.style.padding = '15px 25px';
+                  decrypted.style.borderRadius = '15px';
+                  decrypted.style.color = '#333';
+                  decrypted.style.fontSize = '1.2rem';
+                  decrypted.style.fontWeight = '600';
+                  decrypted.style.boxShadow = '0 5px 20px rgba(0,0,0,0.3)';
+                  decrypted.style.opacity = '0';
+                  decrypted.style.transition =
+                    'all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+                  decrypted.style.zIndex = '100';
+                  decrypted.textContent = '💕 I love you, Alice!';
+                  decrypted.id = 'decryptedMessage';
+                  container.appendChild(decrypted);
+
+                  setTimeout(() => {
+                    decrypted.style.opacity = '1';
+                    decrypted.style.transform = 'translateX(-50%) scale(1)';
+                    createParticles(endX + 10, endY + 135, 30);
+                  }, 100);
+                }, 1000);
+              }, 800);
+            }, 1000);
+          }, 500);
+        }, 2100);
+      }
+
+      function drawConnection(fromId, toId, direction) {
+        const fromEl =
+          document.getElementById(fromId).querySelector('.actor-icon') ||
+          document.querySelector('.network-container');
+        const toEl =
+          document.getElementById(toId).querySelector('.actor-icon') ||
+          document.querySelector('.network-container');
+
+        const fromRect = fromEl.getBoundingClientRect();
+        const toRect = toEl.getBoundingClientRect();
+
+        const line = document.createElement('div');
+        line.className = 'connection-line';
+
+        if (direction === 'right') {
+          line.style.left = fromRect.right + 'px';
+          line.style.top = fromRect.top + fromRect.height / 2 + 'px';
+          line.style.width = toRect.left - fromRect.right + 'px';
+        }
+
+        document.getElementById('container').appendChild(line);
+
+        setTimeout(() => {
+          line.classList.add('show');
+        }, 10);
+
+        setTimeout(() => {
+          line.remove();
+        }, 2000);
+      }
+
+      function drawLookupBeam(fromId, toId) {
+        const fromEl =
+          document.getElementById(fromId).querySelector('.actor-icon') ||
+          document.querySelector('.network-container');
+        const toEl =
+          document.getElementById(toId).querySelector('.actor-icon') ||
+          document.querySelector('.network-container');
+
+        const fromRect = fromEl.getBoundingClientRect();
+        const toRect = toEl.getBoundingClientRect();
+
+        const beam = document.createElement('div');
+        beam.className = 'lookup-beam';
+
+        const fromX = fromRect.left + fromRect.width / 2;
+        const toX = toRect.left + toRect.width / 2;
+
+        if (fromX < toX) {
+          beam.style.left = fromRect.right + 'px';
+          beam.style.width = toRect.left - fromRect.right + 'px';
+        } else {
+          beam.style.left = toRect.right + 'px';
+          beam.style.width = fromRect.left - toRect.right + 'px';
+        }
+
+        beam.style.top = fromRect.top + fromRect.height / 2 + 'px';
+
+        document.getElementById('container').appendChild(beam);
+
+        setTimeout(() => {
+          beam.classList.add('active');
+        }, 10);
+
+        setTimeout(() => {
+          beam.remove();
+        }, 1500);
+      }
+
+      function nextScene() {
+        if (isAnimating) return;
+
+        currentScene++;
+
+        // Hide click hint after first click
+        const clickHint = document.getElementById('clickHint');
+        if (clickHint) {
+          clickHint.style.display = 'none';
+        }
+
+        if (currentScene >= scenes.length) {
+          // Show completion message and reset hint
+          updateStatus('✨ Demo complete! Click to restart');
+          if (clickHint) {
+            clickHint.textContent = '👆 Click to restart';
+            clickHint.style.display = 'block';
+          }
+          return;
+        }
+
+        isAnimating = true;
+        const scene = scenes[currentScene];
+
+        updateStatus(scene.status);
+        updateProgress(((currentScene + 1) / scenes.length) * 100);
+
+        scene.action();
+
+        // Allow next click after animation completes
+        setTimeout(() => {
+          isAnimating = false;
+        }, scene.duration);
+      }
+
+      function resetAnimation() {
+        location.reload();
+      }
+
+      // Add click listener to the entire document
+      document.addEventListener('click', () => {
+        if (currentScene >= scenes.length - 1 && !isAnimating) {
+          // If completed, restart
+          resetAnimation();
+        } else {
+          nextScene();
         }
       });
-
-      // Initialize
-      showSlide(0);
     </script>
   </body>
 </html>
