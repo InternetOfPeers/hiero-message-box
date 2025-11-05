@@ -1,6 +1,6 @@
-# Hiero Message Box - Encrypted Asynchronous Messaging
+# Hiero Message Box - Private Asynchronous Messaging
 
-Hiero Message Box is a simple way for users to set up a message box to receive private messages, for example getting alerts about security communications about their assets or wallet, etc.
+Hiero Message Box is a simple way for users to set up a message box and receive private messages, for example getting alerts about security communications about their assets or wallet, etc.
 
 [View the interactive presentation](./docs/presentation.html) to visualize the message box flow.
 
