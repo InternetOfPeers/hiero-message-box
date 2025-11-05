@@ -9,10 +9,7 @@ async function main() {
     loadEnvFile();
     client = initializeClient();
 
-    // Parse command line arguments
     const args = process.argv.slice(2);
-
-    // Default to sequence 1 if no arguments provided
     const startSequence = args[0] ? parseInt(args[0]) : 2;
     const endSequence = args[1] ? parseInt(args[1]) : undefined;
 
@@ -59,9 +56,7 @@ async function main() {
       console.log('✓ No messages found in the specified range\n');
     } else {
       console.log(`✓ Found ${messages.length} message(s):\n`);
-      messages.forEach(message => {
-        console.log(`📩 ${message}`);
-      });
+      messages.forEach(message => console.log(`📩 ${message}`));
       console.log();
     }
 

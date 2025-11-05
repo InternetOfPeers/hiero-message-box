@@ -27,13 +27,9 @@ function loadEnvFile() {
     const lines = envContent.split('\n');
 
     for (const line of lines) {
-      // Skip empty lines and comments
       const trimmedLine = line.trim();
-      if (!trimmedLine || trimmedLine.startsWith('#')) {
-        continue;
-      }
+      if (!trimmedLine || trimmedLine.startsWith('#')) continue;
 
-      // Parse KEY=VALUE format
       const separatorIndex = trimmedLine.indexOf('=');
       if (separatorIndex !== -1) {
         const key = trimmedLine.substring(0, separatorIndex).trim();
@@ -47,10 +43,7 @@ function loadEnvFile() {
           value = value.substring(1, value.length - 1);
         }
 
-        // Set environment variable if not already set
-        if (!process.env[key]) {
-          process.env[key] = value;
-        }
+        if (!process.env[key]) process.env[key] = value;
       }
     }
 
@@ -109,8 +102,7 @@ function decryptMessage(encryptedData, privateKey) {
     encryptedData.encryptedData
   ) {
     try {
-      // Hybrid encryption: Decrypt AES key with RSA, then decrypt message with AES
-      // Decrypt the AES key
+      // Decrypt the AES key with RSA
       const encryptedAesKey = Buffer.from(encryptedData.encryptedKey, 'base64');
       const aesKey = crypto.privateDecrypt(
         {
@@ -124,14 +116,10 @@ function decryptMessage(encryptedData, privateKey) {
       // Decrypt the message with AES
       const iv = Buffer.from(encryptedData.iv, 'base64');
       const decipher = crypto.createDecipheriv('aes-256-cbc', aesKey, iv);
-      let decrypted = decipher.update(
-        encryptedData.encryptedData,
-        'base64',
-        'utf8'
+      return (
+        decipher.update(encryptedData.encryptedData, 'base64', 'utf8') +
+        decipher.final('utf8')
       );
-      decrypted += decipher.final('utf8');
-
-      return decrypted;
     } catch (error) {
       throw new Error(`Decryption failed: ${error.message}`);
     }
@@ -379,16 +367,10 @@ function decodeCBOR(buffer) {
  */
 function findProjectRoot(startDir = __dirname) {
   let currentDir = startDir;
-
   while (currentDir !== path.dirname(currentDir)) {
-    // Stop at filesystem root
-    if (fs.existsSync(path.join(currentDir, 'package.json'))) {
-      return currentDir;
-    }
+    if (fs.existsSync(path.join(currentDir, 'package.json'))) return currentDir;
     currentDir = path.dirname(currentDir);
   }
-
-  // Fallback to current directory if package.json not found
   return startDir;
 }
 

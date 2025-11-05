@@ -37,7 +37,6 @@ function initializeClient() {
     );
   }
 
-  // Initialize client based on network configuration
   const client =
     network.toLowerCase() === 'mainnet'
       ? Client.forMainnet()
@@ -46,7 +45,6 @@ function initializeClient() {
     AccountId.fromString(operatorId),
     PrivateKey.fromStringDer(operatorKey)
   );
-
   console.debug(`✓ Hedera client initialized (${network})`);
   return client;
 }
@@ -61,7 +59,6 @@ function getMirrorNodeUrl() {
     network.toLowerCase() === 'mainnet'
       ? 'https://mainnet.mirrornode.hedera.com'
       : 'https://testnet.mirrornode.hedera.com';
-
   return process.env.MIRROR_NODE_URL || defaultUrl;
 }
 
@@ -90,12 +87,15 @@ async function updateAccountMemo(client, accountId, memo) {
     .execute(client)
     .then(tx => tx.getReceipt(client));
 
-  if (isTransactionSuccessful(receipt)) {
-    console.debug(`✓ Account ${accountId} updated with memo "${memo}"`);
-    return { success: true };
-  }
-  console.debug(`✗ Failed to set memo "${memo}" for account ${accountId}`);
-  return { success: false, error: receipt.status.toString() };
+  const success = isTransactionSuccessful(receipt);
+  console.debug(
+    success
+      ? `✓ Account ${accountId} updated with memo "${memo}"`
+      : `✗ Failed to set memo "${memo}" for account ${accountId}`
+  );
+  return success
+    ? { success: true }
+    : { success: false, error: receipt.status.toString() };
 }
 
 /**
@@ -109,12 +109,13 @@ async function createTopic(client, memo) {
     .execute(client)
     .then(tx => tx.getReceipt(client));
 
-  if (isTransactionSuccessful(receipt)) {
-    console.debug(`✓ Topic created: ${receipt.topicId}`);
-    return { success: true, topicId: receipt.topicId.toString() };
-  }
-  console.debug(`✗ Failed to create topic`);
-  return { success: false, error: receipt.status.toString() };
+  const success = isTransactionSuccessful(receipt);
+  console.debug(
+    success ? `✓ Topic created: ${receipt.topicId}` : `✗ Failed to create topic`
+  );
+  return success
+    ? { success: true, topicId: receipt.topicId.toString() }
+    : { success: false, error: receipt.status.toString() };
 }
 
 /**
@@ -125,19 +126,19 @@ async function createTopic(client, memo) {
  * @returns
  */
 async function submitMessageToHCS(client, topicId, message) {
-  const receipt = await new TopicMessageSubmitTransaction({
-    topicId,
-    message: message,
-  })
+  const receipt = await new TopicMessageSubmitTransaction({ topicId, message })
     .execute(client)
     .then(tx => tx.getReceipt(client));
 
-  if (isTransactionSuccessful(receipt)) {
-    console.debug(`✓ Message submitted to ${topicId}`);
-    return { success: true, topicId: topicId };
-  }
-  console.debug(`✗ Failed to submit message to ${topicId}`);
-  return { success: false, error: receipt.status.toString() };
+  const success = isTransactionSuccessful(receipt);
+  console.debug(
+    success
+      ? `✓ Message submitted to ${topicId}`
+      : `✗ Failed to submit message to ${topicId}`
+  );
+  return success
+    ? { success: true, topicId }
+    : { success: false, error: receipt.status.toString() };
 }
 
 /**
@@ -205,13 +206,11 @@ function reassembleChunkedMessages(messages) {
   const completeMessages = [];
 
   messages.forEach(msg => {
-    // Safety check: ensure msg and msg.message exist
     if (!msg || !msg.message) {
       console.warn('⚠ Skipping invalid message:', msg);
       return;
     }
 
-    // If no chunks, it's a complete message
     if (!msg.chunk_info) {
       completeMessages.push(msg);
       return;
@@ -239,29 +238,21 @@ function reassembleChunkedMessages(messages) {
     }
 
     const group = chunkedGroups.get(key);
-
-    // Track if this is the first chunk
-    if (chunkNum === 1) {
-      group.hasFirstChunk = true;
-    }
-
-    group.chunks[chunkNum - 1] = msg.message; // Store chunk in order (1-indexed)
-
-    // Track the minimum and maximum sequence numbers
-    if (msg.sequence_number < group.minSequence) {
+    if (chunkNum === 1) group.hasFirstChunk = true;
+    group.chunks[chunkNum - 1] = msg.message;
+    if (msg.sequence_number < group.minSequence)
       group.minSequence = msg.sequence_number;
-    }
-    if (msg.sequence_number > group.maxSequence) {
+    if (msg.sequence_number > group.maxSequence)
       group.maxSequence = msg.sequence_number;
-    }
   });
 
   // Reassemble chunked messages
   chunkedGroups.forEach((group, key) => {
+    console.debug(key);
     // Skip groups that don't have the first chunk (incomplete/truncated)
     if (!group.hasFirstChunk) {
       console.warn(
-        `⚠ Skipping incomplete chunked message (transaction ${key.split('-')[0]}): missing first chunk`
+        `⚠ Skipping incomplete chunked message (transaction ${key}): missing first chunk`
       );
       return;
     }
@@ -273,12 +264,11 @@ function reassembleChunkedMessages(messages) {
       group.chunks.length !== group.total
     ) {
       console.warn(
-        `⚠ Invalid chunk array for transaction ${key.split('-')[0]}: expected ${group.total} chunks, got ${group.chunks ? group.chunks.length : 0}`
+        `⚠ Invalid chunk array for transaction ${key}: expected ${group.total} chunks, got ${group.chunks ? group.chunks.length : 0}`
       );
       return;
     }
 
-    // Check if all chunks are present and valid
     const allChunksPresent = group.chunks.every(
       chunk =>
         chunk !== undefined &&
@@ -307,16 +297,14 @@ function reassembleChunkedMessages(messages) {
         const reassembledMessage = {
           ...group.metadata,
           message: reassembledBase64,
-          sequence_number: group.minSequence, // Use first chunk's sequence number for display
-          _maxSequence: group.maxSequence, // Internal field to track last chunk processed
+          sequence_number: group.minSequence,
+          _maxSequence: group.maxSequence,
         };
-        // Delete chunk_info instead of setting it to undefined
         delete reassembledMessage.chunk_info;
-
         completeMessages.push(reassembledMessage);
       } catch (error) {
         console.warn(
-          `⚠ Error reassembling chunked message (transaction ${key.split('-')[0]}):`,
+          `⚠ Error reassembling chunked message (transaction ${key}):`,
           error.message
         );
       }
@@ -326,7 +314,7 @@ function reassembleChunkedMessages(messages) {
           c !== undefined && c !== null && typeof c === 'string' && c.length > 0
       ).length;
       console.warn(
-        `⚠ Incomplete chunked message (transaction ${key.split('-')[0]}): ${received}/${group.total} chunks received`
+        `⚠ Incomplete chunked message (transaction ${key}): ${received}/${group.total} chunks received`
       );
     }
   });

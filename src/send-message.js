@@ -9,17 +9,10 @@ async function main() {
     loadEnvFile();
     client = initializeClient();
 
-    // Parse arguments
     const args = process.argv.slice(2);
-
-    // Check for --cbor flag
     const cborIndex = args.indexOf('--cbor');
     const useCBOR = cborIndex !== -1;
-
-    // Remove --cbor flag from args if present
-    if (useCBOR) {
-      args.splice(cborIndex, 1);
-    }
+    if (useCBOR) args.splice(cborIndex, 1);
 
     if (args.length < 2) {
       console.error(
@@ -33,8 +26,9 @@ async function main() {
 
     const recipientAccountId = args[0];
     const message = args.slice(1).join(' ');
+    const format = useCBOR ? 'CBOR' : 'JSON';
     console.log(
-      `⚙ Sending message:\n  - Recipient: ${recipientAccountId}\n  - Message before encryption: "${message}"\n  - Format: ${useCBOR ? 'CBOR' : 'JSON'}`
+      `⚙ Sending message:\n  - Recipient: ${recipientAccountId}\n  - Message before encryption: "${message}"\n  - Format: ${format}`
     );
     await sendMessage(client, recipientAccountId, message, { useCBOR });
     client.close();

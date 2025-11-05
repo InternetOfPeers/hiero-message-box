@@ -12,16 +12,16 @@ async function main() {
     console.log(`⚙ Listening for messages for account ${accountId}`);
     console.log('✓ Polling every 3 seconds. Press Ctrl+C to exit\n');
     while (true) {
-      await pollMessages(client, process.env.DATA_DIR, accountId).then(
-        messages => {
-          if (messages.length > 0)
-            console.log(`${messages.length} new message(s) received`);
-          messages.forEach(message => {
-            console.log(`📥`, message);
-          });
-          return new Promise(resolve => setTimeout(resolve, 3000));
-        }
+      const messages = await pollMessages(
+        client,
+        process.env.DATA_DIR,
+        accountId
       );
+      if (messages.length > 0) {
+        console.log(`${messages.length} new message(s) received`);
+        messages.forEach(message => console.log(`📥`, message));
+      }
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
   } catch (error) {
     console.error('\n✗ Error:', error.message);

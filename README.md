@@ -22,7 +22,6 @@ Users can also check for historical messages using this command:
 npm run check-messages -- [start-sequence] [end-sequence]
 ```
 
-
 When setting up for the first time, the program will:
 
 - Generate RSA key pairs for encryption/decryption
