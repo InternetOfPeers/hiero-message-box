@@ -37,7 +37,7 @@ To avoid spam, users can decide to set a paid topic as their message box.
 - **RSA Encryption**: Automatically generates and manages RSA key pairs for message encryption/decryption
 - **Hedera Topics**: Creates and manages Hedera topics for message distribution
 - **Key Verification**: Automatically verifies local keys match the topic's public key
-- **Mirror Node API**: Uses Hedera Mirror Node for reliable message polling and topic verification
+- **Mirror Node API**: Uses Hedera Mirror Node for all read operations (account validation, memo retrieval, message polling, topic verification)
 - **Real-time Listening**: Continuously polls for new encrypted messages every 3 seconds
 - **Message Formats**: Supports both JSON and CBOR encoding formats for flexibility
 - **Chunked Messages**: Automatically handles messages larger than 1KB split across multiple chunks by HCS
@@ -222,7 +222,7 @@ The savings are relatively constant (~20 bytes per message) regardless of messag
 
 #### How it works
 
-1. Reads the target account's memo to find the message box topic ID
+1. Reads the target account's memo via Mirror Node to find the message box topic ID
 2. Retrieves the recipient's public key from the first message in the topic via Mirror Node API
 3. Generates a random AES-256 key
 4. Encrypts the message with AES (fast, suitable for large messages)
@@ -325,38 +325,35 @@ For an at-a-glance animated overview, open:
 
 ```text
 ┌─────────────────────────────────────┐
-│ 1. Get Target Account ID            │
+│ 1. Fetch Account Memo via Mirror    │
+│    Node API                         │
 └──────────────┬──────────────────────┘
                ↓
 ┌─────────────────────────────────────┐
-│ 2. Fetch Account Memo via API       │
-└──────────────┬──────────────────────┘
-               ↓
-┌─────────────────────────────────────┐
-│ 3. Extract Topic ID from Memo       │
+│ 2. Extract Topic ID from Memo       │
 │    Format: [HIP-9999:0.0.xxxxx]     │
 └──────────────┬──────────────────────┘
                ↓
 ┌─────────────────────────────────────┐
-│ 4. Get Public Key via Mirror Node   │
+│ 3. Get Public Key via Mirror Node   │
 │    (from first message in topic)    │
 └──────────────┬──────────────────────┘
                ↓
 ┌─────────────────────────────────────┐
-│ 5. Generate Random AES-256 Key      │
+│ 4. Generate Random AES-256 Key      │
 └──────────────┬──────────────────────┘
                ↓
 ┌─────────────────────────────────────┐
-│ 6. Encrypt Message with AES         │
+│ 5. Encrypt Message with AES         │
 └──────────────┬──────────────────────┘
                ↓
 ┌─────────────────────────────────────┐
-│ 7. Encrypt AES Key with RSA         │
+│ 6. Encrypt AES Key with RSA         │
 └──────────────┬──────────────────────┘
                ↓
 ┌─────────────────────────────────────┐
-│ 8. Submit Encrypted Payload to      │
-│    Topic as JSON with type field    │
+│ 7. Submit Encrypted Payload to      │
+│    Topic as JSON/CBOR with type     │
 └─────────────────────────────────────┘
 ```
 
@@ -387,9 +384,11 @@ The codebase is organized into three main modules:
 
 2. **`lib/hedera.js`**: Hedera blockchain operations
    - Client initialization (testnet/mainnet)
-   - Account memo read/update
+   - Account memo read (via Mirror Node) and update (via Hedera SDK)
+   - Account validation using Mirror Node API
    - Topic creation and message submission
    - Mirror Node URL configuration
+   - Topic message queries with pagination support
 
 3. **`lib/message-box.js`**: Core message box logic
    - Message box setup with key verification
@@ -401,11 +400,30 @@ The codebase is organized into three main modules:
 
 ### Mirror Node API Usage
 
-This application uses the Hedera Mirror Node REST API for all query operations:
+This application uses the Hedera Mirror Node REST API for all read operations, providing cost-free and efficient data access:
+
+**Core Helper Function:**
+
+- **`mirrorNodeRequest(endpoint, options)`**: Centralized helper for all Mirror Node HTTPS requests
+  - Handles connection, data streaming, JSON parsing, and error handling
+  - Supports `resolveOnError` option for graceful error handling
+  - Reduces code duplication across all Mirror Node queries
+
+**Account Operations:**
+
+- **Account Validation**: `GET /api/v1/accounts/{accountId}`
+  - Validates account existence and format before sending messages
+  - Checks if account is active (not deleted)
+  - Prevents sending to invalid or non-existent accounts
+- **Account Memo Retrieval**: `GET /api/v1/accounts/{accountId}`
+  - Fetches account memos via Mirror Node (free, no consensus node query costs)
+  - Used to extract message box topic IDs in HIP-9999 format
+
+**Topic Operations:**
 
 - **Topic Verification**: `GET /api/v1/topics/{topicId}/messages?limit=1&order=asc`
   - Checks if topics exist and validates their first message contains a public key
-- **Public Key Retrieval**: `GET /api/v1/topics/{topicId}/messages/1`
+- **Public Key Retrieval**: `GET /api/v1/topics/{topicId}/messages?limit=1&order=asc`
   - Fetches recipient public keys from topic's first message
 - **Message Polling**: `GET /api/v1/topics/{topicId}/messages?sequencenumber=gt:{lastSeq}&order=asc&limit=100`
   - Polls for new messages every 3 seconds
@@ -413,6 +431,9 @@ This application uses the Hedera Mirror Node REST API for all query operations:
   - Filters for messages with type `ENCRYPTED_MESSAGE`
 - **Initial Sync**: `GET /api/v1/topics/{topicId}/messages?order=desc&limit=1`
   - Gets the latest sequence number on first poll to avoid processing old messages
+- **Historical Messages**: `GET /api/v1/topics/{topicId}/messages?sequencenumber=gt:{seq}&order=asc&limit=100`
+  - Retrieves messages in specified sequence ranges
+  - Supports pagination for large message histories
 
 ### Message Format
 
@@ -500,6 +521,7 @@ This allows the listener to:
 ./
 ├── src/
 │   ├── setup-message-box.js        # Setup message box for account
+|   |── check-messages.js           # Check existing messages inside the message box
 │   ├── listen-for-new-messages.js  # Listener/Receiver application
 │   ├── send-message.js             # Sender application
 │   ├── remove-message-box.js       # Remove message box configuration
@@ -519,13 +541,13 @@ This allows the listener to:
 ## Available NPM Scripts
 
 ```bash
-npm start                                   # Setup message box + start listening
-npm run setup-message-box                   # Setup/verify message box configuration
-npm run listen-for-new-messages             # Start polling for new messages
-npm run check-messages -- [start] [end]     # Read message history (defaults to all messages)
-npm run send-message -- <id> <msg> [--cbor] # Send encrypted message to account
-npm run remove-message-box                  # Remove message box (clear account memo)
-npm run format                              # Format code with Prettier
+npm start                                           # Setup message box and start listening for new messages
+npm run setup-message-box                           # Setup/verify message box configuration
+npm run listen-for-new-messages                     # Start polling for new messages
+npm run check-messages -- [start] [end]             # Read message history (defaults to all messages)
+npm run send-message -- <account id> <msg> [--cbor] # Send encrypted message to account
+npm run remove-message-box                          # Remove message box (clear account memo)
+npm run format                                      # Format code with Prettier
 ```
 
 **Note:** Use `--` to separate npm options from script arguments when passing parameters.
@@ -600,6 +622,13 @@ If these variables are not set, the application defaults to **testnet**.
 - The target account hasn't set up a message box yet
 - The account memo doesn't contain a valid HIP-9999 format: `[HIP-9999:0.0.xxxxx]`
 - Ask the recipient to run `npm run setup-message-box` first
+
+### "is not a valid Hedera account"
+
+- The account does not exist on the network
+- The account has been deleted
+- You may be trying to send directly to a topic ID instead of an account ID
+- Solution: Verify the account ID and ensure it's a valid, active Hedera account with a message box configured
 
 ### "Cannot decrypt message" or "Encrypted message (cannot decrypt)"
 
