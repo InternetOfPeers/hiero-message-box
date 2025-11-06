@@ -248,7 +248,6 @@ function reassembleChunkedMessages(messages) {
 
   // Reassemble chunked messages
   chunkedGroups.forEach((group, key) => {
-    console.debug(key);
     // Skip groups that don't have the first chunk (incomplete/truncated)
     if (!group.hasFirstChunk) {
       console.warn(
