@@ -5,6 +5,138 @@ const path = require('path');
 // == Public functions ========================================================
 
 /**
+ * Encrypt message using ECIES (Elliptic Curve Integrated Encryption Scheme)
+ * Uses ECDH for key exchange, AES-256-GCM for encryption
+ * NOTE: Only secp256k1 is supported. ED25519 cannot be used for ECDH.
+ * @param {string} message - Message to encrypt
+ * @param {string} publicKeyHex - Recipient's public key in hex format
+ * @param {string} curve - Elliptic curve to use (only 'secp256k1' supported)
+ * @returns {Object} Encrypted data with ephemeral public key, encrypted message, IV, and auth tag
+ */
+function encryptMessageECIES(message, publicKeyHex, curve = 'secp256k1') {
+  try {
+    if (curve !== 'secp256k1') {
+      throw new Error(
+        `Only secp256k1 is supported for ECIES. Received: ${curve}. ` +
+          `ED25519 cannot be used for ECDH key exchange.`
+      );
+    }
+
+    // Generate ephemeral key pair for ECDH
+    const ephemeralKeyPair = crypto.generateKeyPairSync('ec', {
+      namedCurve: 'secp256k1',
+    });
+
+    // Create ECDH from ephemeral private key
+    const ecdh = crypto.createECDH('secp256k1');
+    const ephemeralPrivateKeyDer = ephemeralKeyPair.privateKey.export({
+      type: 'sec1',
+      format: 'der',
+    });
+
+    // Extract raw private key (32 bytes) from SEC1 DER format
+    const privKeyOffset =
+      ephemeralPrivateKeyDer.indexOf(Buffer.from([0x04, 0x20])) + 2;
+    const ephemeralPrivKeyRaw = ephemeralPrivateKeyDer.slice(
+      privKeyOffset,
+      privKeyOffset + 32
+    );
+    ecdh.setPrivateKey(ephemeralPrivKeyRaw);
+
+    // Compute shared secret with recipient's public key
+    // Public key should be 33 bytes (compressed) or 65 bytes (uncompressed)
+    const recipientPubKeyBuffer = Buffer.from(publicKeyHex, 'hex');
+    const sharedSecret = ecdh.computeSecret(recipientPubKeyBuffer);
+
+    // Derive encryption key from shared secret using SHA-256
+    const encryptionKey = crypto
+      .createHash('sha256')
+      .update(sharedSecret)
+      .digest();
+
+    // Encrypt the message with AES-256-GCM
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey, iv);
+    let encryptedMessage = cipher.update(message, 'utf8', 'base64');
+    encryptedMessage += cipher.final('base64');
+    const authTag = cipher.getAuthTag();
+
+    // Get ephemeral public key (compressed format)
+    const ephemeralPublicKey = ecdh.getPublicKey('hex', 'compressed');
+
+    return {
+      ephemeralPublicKey,
+      iv: iv.toString('base64'),
+      encryptedData: encryptedMessage,
+      authTag: authTag.toString('base64'),
+      curve: curve,
+    };
+  } catch (error) {
+    throw new Error(`ECIES encryption failed: ${error.message}`);
+  }
+}
+
+/**
+ * Decrypt message using ECIES
+ * NOTE: Only secp256k1 is supported. ED25519 cannot be used for ECDH.
+ * @param {Object} encryptedData - Encrypted data object
+ * @param {string} privateKeyHex - Recipient's private key in hex format
+ * @param {string} curve - Elliptic curve to use (only 'secp256k1' supported)
+ * @returns {string} Decrypted message
+ */
+function decryptMessageECIES(
+  encryptedData,
+  privateKeyHex,
+  curve = 'secp256k1'
+) {
+  try {
+    const {
+      ephemeralPublicKey,
+      iv,
+      encryptedData: ciphertext,
+      authTag,
+    } = encryptedData;
+
+    if (curve !== 'secp256k1') {
+      throw new Error(
+        `Only secp256k1 is supported for ECIES. Received: ${curve}. ` +
+          `ED25519 cannot be used for ECDH key exchange.`
+      );
+    }
+
+    // Create ECDH with our private key
+    const ecdh = crypto.createECDH('secp256k1');
+    const privateKeyBuffer = Buffer.from(privateKeyHex, 'hex');
+    ecdh.setPrivateKey(privateKeyBuffer);
+
+    // Compute shared secret with ephemeral public key
+    const ephemeralPubKeyBuffer = Buffer.from(ephemeralPublicKey, 'hex');
+    const sharedSecret = ecdh.computeSecret(ephemeralPubKeyBuffer);
+
+    // Derive encryption key
+    const encryptionKey = crypto
+      .createHash('sha256')
+      .update(sharedSecret)
+      .digest();
+
+    // Decrypt with AES-256-GCM
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      encryptionKey,
+      Buffer.from(iv, 'base64')
+    );
+    decipher.setAuthTag(Buffer.from(authTag, 'base64'));
+
+    let decrypted = decipher.update(ciphertext, 'base64', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
+  } catch (error) {
+    throw new Error(`ECIES decryption failed: ${error.message}`);
+  }
+}
+
+/**
  * Load environment variables from .env file (native implementation)
  */
 function loadEnvFile() {
@@ -54,12 +186,42 @@ function loadEnvFile() {
 }
 
 /**
- * Encrypt message using hybrid encryption (AES + RSA)
+ * Encrypt message using hybrid encryption (AES + RSA) or ECIES
+ * Automatically detects encryption type from publicKey format or environment
+ * @param {string} message - Message to encrypt
+ * @param {string|Object} publicKey - Public key (PEM for RSA, hex/object for ECIES)
+ * @returns {Object} Encrypted data
+ */
+function encryptMessage(message, publicKey) {
+  // Detect encryption type based on publicKey format
+  if (typeof publicKey === 'object' && publicKey.type === 'ECIES') {
+    // ECIES encryption
+    return {
+      type: 'ECIES',
+      ...encryptMessageECIES(
+        message,
+        publicKey.key,
+        publicKey.curve || 'secp256k1'
+      ),
+    };
+  } else if (
+    typeof publicKey === 'string' &&
+    publicKey.startsWith('-----BEGIN')
+  ) {
+    // RSA encryption (existing implementation)
+    return encryptMessageRSA(message, publicKey);
+  } else {
+    throw new Error('Unsupported public key format for encryption');
+  }
+}
+
+/**
+ * Encrypt message using hybrid encryption (AES + RSA) - original implementation
  * 1. Generate AES key
  * 2. Encrypt message with AES
  * 3. Encrypt AES key with RSA
  */
-function encryptMessage(message, publicKeyPem) {
+function encryptMessageRSA(message, publicKeyPem) {
   try {
     // Generate random AES-256 key
     const aesKey = crypto.randomBytes(32); // 256 bits
@@ -82,19 +244,51 @@ function encryptMessage(message, publicKeyPem) {
 
     // Return encrypted data as JSON
     return {
+      type: 'RSA',
       encryptedKey: encryptedAesKey.toString('base64'),
       iv: iv.toString('base64'),
       encryptedData: encryptedMessage,
     };
   } catch (error) {
-    throw new Error(`Encryption failed: ${error.message}`);
+    throw new Error(`RSA encryption failed: ${error.message}`);
   }
 }
 
 /**
- * Decrypt message using hybrid encryption (RSA + AES)
+ * Decrypt message using hybrid encryption (RSA + AES) or ECIES
+ * Automatically detects encryption type from encryptedData
+ * @param {Object} encryptedData - Encrypted data object
+ * @param {string|Object} privateKey - Private key (PEM for RSA, hex/object for ECIES)
+ * @returns {string} Decrypted message
  */
 function decryptMessage(encryptedData, privateKey) {
+  // Detect encryption type from encryptedData
+  if (encryptedData.type === 'ECIES') {
+    // ECIES decryption
+    if (typeof privateKey === 'object') {
+      return decryptMessageECIES(
+        encryptedData,
+        privateKey.key,
+        privateKey.curve || 'secp256k1'
+      );
+    } else {
+      throw new Error(
+        'ECIES decryption requires private key object with key and curve'
+      );
+    }
+  } else if (encryptedData.type === 'RSA' || encryptedData.encryptedKey) {
+    // RSA decryption (existing implementation)
+    const keyStr = typeof privateKey === 'string' ? privateKey : privateKey.key;
+    return decryptMessageRSA(encryptedData, keyStr);
+  } else {
+    throw new Error('Unsupported encryption format');
+  }
+}
+
+/**
+ * Decrypt message using hybrid encryption (RSA + AES) - original implementation
+ */
+function decryptMessageRSA(encryptedData, privateKey) {
   // Check if it's hybrid encryption (AES + RSA)
   if (
     typeof encryptedData === 'object' &&
@@ -121,7 +315,7 @@ function decryptMessage(encryptedData, privateKey) {
         decipher.final('utf8')
       );
     } catch (error) {
-      throw new Error(`Decryption failed: ${error.message}`);
+      throw new Error(`RSA decryption failed: ${error.message}`);
     }
   } else {
     // Error: Unsupported encryption format

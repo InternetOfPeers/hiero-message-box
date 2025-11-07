@@ -7,6 +7,7 @@ const {
   TopicMessageSubmitTransaction,
 } = require('@hashgraph/sdk');
 const https = require('https');
+const crypto = require('crypto');
 
 // Private functions
 
@@ -17,6 +18,64 @@ const https = require('https');
  */
 function isTransactionSuccessful(receipt) {
   return receipt.status.toString() === 'SUCCESS';
+}
+
+/**
+ * Parse Hedera private key from DER format and extract key type and raw key bytes
+ * @param {string} derPrivateKey - DER-encoded private key in hex format
+ * @returns {Object} Object with keyType ('ED25519' or 'ECDSA_SECP256K1') and keyBytes (Buffer)
+ */
+function parseHederaPrivateKey(derPrivateKey) {
+  try {
+    const privateKey = PrivateKey.fromStringDer(derPrivateKey);
+
+    // Hedera SDK returns key type as string: 'ed25519' or 'secp256k1'
+    const keyTypeName =
+      privateKey.type === 'secp256k1' ? 'ECDSA_SECP256K1' : 'ED25519';
+
+    // Use toBytesRaw() to get raw key bytes (32 bytes for both key types)
+    const rawKeyBytes = Buffer.from(privateKey.toBytesRaw());
+    const rawKeyHex = rawKeyBytes.toString('hex');
+
+    return {
+      keyType: keyTypeName,
+      keyBytes: rawKeyBytes,
+      keyHex: rawKeyHex,
+      hederaPrivateKey: privateKey,
+    };
+  } catch (error) {
+    throw new Error(`Failed to parse Hedera private key: ${error.message}`);
+  }
+}
+
+/**
+ * Derive public key from Hedera private key
+ * @param {string} derPrivateKey - DER-encoded private key in hex format
+ * @returns {Object} Object with publicKeyHex (raw bytes) and keyType
+ */
+function derivePublicKeyFromHederaKey(derPrivateKey) {
+  try {
+    const privateKey = PrivateKey.fromStringDer(derPrivateKey);
+    const publicKey = privateKey.publicKey;
+
+    // Hedera SDK returns key type as string: 'ed25519' or 'secp256k1'
+    const keyType =
+      privateKey.type === 'secp256k1' ? 'ECDSA_SECP256K1' : 'ED25519';
+
+    // Use toBytesRaw() to get raw key bytes
+    // For SECP256K1: 33 bytes (compressed public key)
+    // For ED25519: 32 bytes
+    const publicKeyBytes = Buffer.from(publicKey.toBytesRaw());
+    const publicKeyHex = publicKeyBytes.toString('hex');
+
+    return {
+      publicKeyHex,
+      keyType,
+      hederaPublicKey: publicKey,
+    };
+  } catch (error) {
+    throw new Error(`Failed to derive public key: ${error.message}`);
+  }
 }
 
 // Public functions
@@ -483,4 +542,6 @@ module.exports = {
   getNewMessages,
   getFirstTopicMessage,
   getMessagesInRange,
+  parseHederaPrivateKey,
+  derivePublicKeyFromHederaKey,
 };

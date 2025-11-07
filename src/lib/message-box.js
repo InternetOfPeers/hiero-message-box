@@ -11,6 +11,8 @@ const {
   getNewMessages,
   getFirstTopicMessage,
   getMessagesInRange,
+  parseHederaPrivateKey,
+  derivePublicKeyFromHederaKey,
 } = require('./hedera');
 const {
   encryptMessage,
@@ -18,6 +20,16 @@ const {
   encodeCBOR,
   decodeCBOR,
 } = require('./common');
+
+// == Private helper functions ================================================
+
+/**
+ * Get the encryption type from environment
+ * @returns {string} 'RSA' or 'ECIES'
+ */
+function getEncryptionType() {
+  return (process.env.ENCRYPTION_TYPE || 'RSA').toUpperCase();
+}
 
 // == Public functions ========================================================
 
@@ -28,7 +40,14 @@ const {
  * @param {string} accountId
  */
 async function setupMessageBox(client, dataDir, accountId) {
-  const { publicKey, privateKey } = loadOrGenerateRSAKeyPair(dataDir);
+  let encryptionType = getEncryptionType();
+  const { publicKey, privateKey } = await loadOrGenerateKeyPair(
+    dataDir,
+    encryptionType
+  );
+  // Re-fetch encryption type in case it was changed during key loading (ED25519 -> RSA fallback)
+  encryptionType = getEncryptionType();
+
   const accountMemo = await getAccountMemo(accountId);
   console.debug(`✓ Current account memo: "${accountMemo}"`);
 
@@ -42,7 +61,8 @@ async function setupMessageBox(client, dataDir, accountId) {
     if (status.exists && status.hasPublicKey) {
       const keysMatch = await verifyKeyPairMatchesTopic(
         messageBoxId,
-        privateKey
+        privateKey,
+        encryptionType
       );
       if (!keysMatch) {
         console.warn(
@@ -82,14 +102,14 @@ async function setupMessageBox(client, dataDir, accountId) {
       throw new Error(`Failed to create new message box: ${result.error}`);
 
     const newMessageBoxId = result.topicId;
-    await publishPublicKey(client, newMessageBoxId, publicKey);
+    await publishPublicKey(client, newMessageBoxId, publicKey, encryptionType);
     await updateAccountMemo(
       client,
       accountId,
       `[HIP-9999:${newMessageBoxId}] If you want to contact me, send HIP-9999 encrypted messages to ${newMessageBoxId}.`
     );
     console.log(
-      `✓ Message box ${newMessageBoxId} set up correctly for account ${accountId}`
+      `✓ Message box ${newMessageBoxId} set up correctly for account ${accountId} (encryption: ${encryptionType})`
     );
     return { success: true, messageBoxId: newMessageBoxId };
   }
@@ -188,8 +208,10 @@ async function sendMessage(client, recipientAccountId, message, options = {}) {
  */
 async function pollMessages(dataDir, accountId) {
   if (pollingCache.firstCall) {
-    const { privateKey } = loadOrGenerateRSAKeyPair(dataDir);
+    const encryptionType = getEncryptionType();
+    const { privateKey } = await loadOrGenerateKeyPair(dataDir, encryptionType);
     pollingCache.privateKey = privateKey;
+    pollingCache.encryptionType = encryptionType;
 
     const accountMemo = await getAccountMemo(accountId);
     console.debug(`✓ Current account memo: "${accountMemo}"`);
@@ -205,6 +227,7 @@ async function pollMessages(dataDir, accountId) {
       true,
       pollingCache.messageBoxId,
       pollingCache.privateKey,
+      pollingCache.encryptionType,
       pollingCache
     );
   }
@@ -213,6 +236,7 @@ async function pollMessages(dataDir, accountId) {
     false,
     pollingCache.messageBoxId,
     pollingCache.privateKey,
+    pollingCache.encryptionType,
     pollingCache
   );
 }
@@ -226,7 +250,8 @@ async function pollMessages(dataDir, accountId) {
  * @returns {Promise<string[]>}
  */
 async function checkMessages(dataDir, accountId, startSequence, endSequence) {
-  const { privateKey } = loadOrGenerateRSAKeyPair(dataDir);
+  const encryptionType = getEncryptionType();
+  const { privateKey } = await loadOrGenerateKeyPair(dataDir, encryptionType);
 
   const accountMemo = await getAccountMemo(accountId);
   console.debug(`✓ Current account memo: "${accountMemo}"`);
@@ -251,7 +276,7 @@ async function checkMessages(dataDir, accountId, startSequence, endSequence) {
   const messages = [];
 
   rawMessages.forEach(msg => {
-    messages.push(formatMessage(msg, privateKey));
+    messages.push(formatMessage(msg, privateKey, encryptionType));
   });
 
   return messages;
@@ -308,10 +333,11 @@ function parseMessageContent(messageBuffer) {
 /**
  * Parse and format a raw message into a human-readable string
  * @param {Object} msg - Raw message object from Hedera
- * @param {string} privateKey - RSA private key for decryption
+ * @param {string|Object} privateKey - RSA private key (PEM string) or ECIES key object
+ * @param {string} encryptionType - 'RSA' or 'ECIES'
  * @returns {string} Formatted message string
  */
-function formatMessage(msg, privateKey) {
+function formatMessage(msg, privateKey, encryptionType) {
   const messageBuffer = Buffer.from(msg.message, 'base64');
   const timestamp = new Date(
     parseFloat(msg.consensus_timestamp) * 1000
@@ -328,7 +354,13 @@ function formatMessage(msg, privateKey) {
       return `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Encrypted message from ${sender} (cannot decrypt):\n${error.message}`;
     }
   } else if (parsed && parsed.type === 'PUBLIC_KEY') {
-    return `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Public key published by ${sender}:\n${parsed.publicKey}`;
+    const keyInfo = parsed.encryptionType ? ` (${parsed.encryptionType})` : '';
+    const keyPreview = parsed.publicKey
+      ? typeof parsed.publicKey === 'string'
+        ? parsed.publicKey.substring(0, 50) + '...'
+        : JSON.stringify(parsed.publicKey).substring(0, 50) + '...'
+      : 'N/A';
+    return `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Public key${keyInfo} published by ${sender}:\n${keyPreview}`;
   } else {
     return `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Plain text message from ${sender}:\n${raw}`;
   }
@@ -338,11 +370,18 @@ function formatMessage(msg, privateKey) {
  * Listen for messages
  * @param {boolean} isFirstPoll
  * @param {string} topicId
- * @param {string} privateKey
+ * @param {string|Object} privateKey
+ * @param {string} encryptionType
  * @param {object} cache
  * @returns {Promise<string[]>}
  */
-async function listenForMessages(isFirstPoll, topicId, privateKey, cache) {
+async function listenForMessages(
+  isFirstPoll,
+  topicId,
+  privateKey,
+  encryptionType,
+  cache
+) {
   try {
     if (isFirstPoll) {
       const latestSeq = await getLatestSequenceNumber(topicId);
@@ -357,7 +396,7 @@ async function listenForMessages(isFirstPoll, topicId, privateKey, cache) {
     const messages = [];
 
     newMessages.forEach(msg => {
-      messages.push(formatMessage(msg, privateKey));
+      messages.push(formatMessage(msg, privateKey, encryptionType));
 
       const lastSeq = msg._maxSequence || msg.sequence_number;
       if (lastSeq > cache.lastSequenceNumber)
@@ -375,15 +414,22 @@ async function listenForMessages(isFirstPoll, topicId, privateKey, cache) {
  * Publish public key to the message box topic
  * @param {import("@hashgraph/sdk").Client} client
  * @param {string} messageBoxId
- * @param {string} publicKey
+ * @param {string|Object} publicKey
+ * @param {string} encryptionType
  */
-async function publishPublicKey(client, messageBoxId, publicKey) {
-  await submitMessageToHCS(
-    client,
-    messageBoxId,
-    JSON.stringify({ type: 'PUBLIC_KEY', publicKey })
-  );
-  console.log('✓ Public key published');
+async function publishPublicKey(
+  client,
+  messageBoxId,
+  publicKey,
+  encryptionType
+) {
+  const message = JSON.stringify({
+    type: 'PUBLIC_KEY',
+    publicKey,
+    encryptionType,
+  });
+  await submitMessageToHCS(client, messageBoxId, message);
+  console.log(`✓ Public key published (${encryptionType})`);
 }
 
 /**
@@ -415,9 +461,46 @@ async function checkMessageBoxStatus(messageBoxId) {
 
 /**
  * Get public key from the first message in the topic using Mirror Node REST API
+ * Returns the public key in the format expected by encryptMessage
  * @param {string} topicId
- * @returns {Promise<string>} Public key
+ * @returns {Promise<string|Object>} Public key (PEM string for RSA, object for ECIES)
  */
+/**
+ * Extract raw public key bytes from DER-encoded format
+ * @param {string} keyHex - Public key in hex format (might be DER or raw)
+ * @param {string} keyType - Key type ('secp256k1' or 'ed25519')
+ * @returns {string} Raw key bytes in hex format
+ */
+function extractRawPublicKey(keyHex, keyType = 'secp256k1') {
+  const keyBuffer = Buffer.from(keyHex, 'hex');
+
+  // Check if it's DER format (starts with SEQUENCE tag 0x30)
+  if (keyBuffer[0] === 0x30) {
+    // DER format - extract raw key from SPKI structure
+    // Look for BIT STRING marker (0x03)
+    const bitStringIndex = keyBuffer.indexOf(0x03);
+    if (bitStringIndex >= 0 && keyBuffer[bitStringIndex + 2] === 0x00) {
+      // Skip BIT STRING header (03 xx 00) and get the raw key
+      const rawKey = keyBuffer.subarray(bitStringIndex + 3);
+      return rawKey.toString('hex');
+    }
+
+    // Alternative: known lengths for standard DER encoding
+    if (keyType === 'secp256k1' && keyBuffer.length === 45) {
+      // Last 33 bytes are the compressed public key
+      return keyBuffer.subarray(-33).toString('hex');
+    } else if (keyType === 'ed25519' && keyBuffer.length === 44) {
+      // Last 32 bytes are the ed25519 public key
+      return keyBuffer.subarray(-32).toString('hex');
+    }
+
+    throw new Error('Unable to extract raw key from DER format');
+  }
+
+  // Already raw format
+  return keyHex;
+}
+
 async function getPublicKeyFromTopic(topicId) {
   try {
     const response = await getFirstTopicMessage(topicId);
@@ -429,8 +512,43 @@ async function getPublicKeyFromTopic(topicId) {
     const parsed = JSON.parse(messageContent);
 
     if (parsed.type === 'PUBLIC_KEY' && parsed.publicKey) {
-      console.log('✓ Public key retrieved from topic');
-      return parsed.publicKey;
+      const encryptionType = parsed.encryptionType || 'RSA';
+      console.log(`✓ Public key retrieved from topic (${encryptionType})`);
+
+      // Return the public key in the format expected by encryptMessage
+      if (encryptionType === 'ECIES') {
+        // For ECIES, parsed.publicKey should already be an object with type, key, and curve
+        if (
+          typeof parsed.publicKey === 'object' &&
+          parsed.publicKey.type === 'ECIES'
+        ) {
+          // Extract raw key if it's in DER format
+          const curve = parsed.publicKey.curve || 'secp256k1';
+          const rawKey = extractRawPublicKey(parsed.publicKey.key, curve);
+
+          return {
+            type: 'ECIES',
+            key: rawKey,
+            curve: curve,
+          };
+        } else if (typeof parsed.publicKey === 'string') {
+          // Legacy format: if it's just a hex string, extract raw key and wrap it
+          const curve =
+            parsed.publicKey.length === 66 ? 'secp256k1' : 'ed25519';
+          const rawKey = extractRawPublicKey(parsed.publicKey, curve);
+
+          return {
+            type: 'ECIES',
+            key: rawKey,
+            curve: curve,
+          };
+        } else {
+          throw new Error('Invalid ECIES public key format');
+        }
+      } else {
+        // For RSA, return the PEM string directly
+        return parsed.publicKey;
+      }
     }
     throw new Error('First message does not contain a public key');
   } catch (error) {
@@ -441,12 +559,32 @@ async function getPublicKeyFromTopic(topicId) {
 /**
  * Check if the provided private key can decrypt messages encrypted with the public key from the topic.
  * @param {string} messageBoxId
- * @param {string} privateKey
+ * @param {string|Object} privateKey
+ * @param {string} encryptionType
  * @returns {Promise<boolean>}
  */
-async function verifyKeyPairMatchesTopic(messageBoxId, privateKey) {
+async function verifyKeyPairMatchesTopic(
+  messageBoxId,
+  privateKey,
+  encryptionType
+) {
   try {
     const messageBoxPublicKey = await getPublicKeyFromTopic(messageBoxId);
+
+    // Check if encryption types match
+    const topicEncryptionType =
+      typeof messageBoxPublicKey === 'object' &&
+      messageBoxPublicKey.type === 'ECIES'
+        ? 'ECIES'
+        : 'RSA';
+
+    if (topicEncryptionType !== encryptionType) {
+      console.log(
+        `✗ Encryption type mismatch: topic uses ${topicEncryptionType}, but configured for ${encryptionType}`
+      );
+      return false;
+    }
+
     const testMessage = 'key_verification_test';
     const encrypted = encryptMessage(testMessage, messageBoxPublicKey);
     const decrypted = decryptMessage(encrypted, privateKey);
@@ -455,6 +593,107 @@ async function verifyKeyPairMatchesTopic(messageBoxId, privateKey) {
     console.log('✗ Key verification failed:', error.message);
     return false;
   }
+}
+
+/**
+ * Loads existing key pair or generates a new one based on encryption type.
+ * @param {string} dataDir - Directory to store keys
+ * @param {string} encryptionType - 'RSA' or 'ECIES'
+ * @returns {Promise<{ publicKey: string|Object, privateKey: string|Object }>} Key pair
+ */
+async function loadOrGenerateKeyPair(dataDir, encryptionType) {
+  if (encryptionType === 'ECIES') {
+    return await loadECIESKeyPair();
+  } else {
+    return loadOrGenerateRSAKeyPair(dataDir);
+  }
+}
+
+/**
+ * Generate ECIES key pair from operator's Hedera private key
+ * @returns {{ publicKey: Object, privateKey: Object }} ECIES key pair
+ */
+function loadECIESKeyPair() {
+  console.debug('⚙ Deriving ECIES key pair from operator credentials');
+
+  const operatorPrivateKey = process.env.HEDERA_PRIVATE_KEY;
+  if (!operatorPrivateKey) {
+    throw new Error('HEDERA_PRIVATE_KEY not found in environment variables');
+  }
+
+  // Parse the key to get its type first
+  const { keyHex, keyType, keyBytes } =
+    parseHederaPrivateKey(operatorPrivateKey);
+
+  // ECIES with native Node.js crypto only supports secp256k1
+  // ED25519 cannot be used for ECDH (key exchange) - it's a signature scheme
+  // Check key type BEFORE attempting to derive public key
+  if (keyType !== 'ECDSA_SECP256K1') {
+    console.warn(
+      `\n⚠ WARNING: ECIES encryption requires a SECP256K1 key, but your Hedera account uses ${keyType}.`
+    );
+    console.warn(
+      `ED25519 is a signature algorithm and cannot be used for ECDH key exchange.\n`
+    );
+
+    const readline = require('readline').createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    return new Promise((resolve, reject) => {
+      readline.question(
+        '? Would you like to use RSA encryption instead? (yes/no): ',
+        ans => {
+          readline.close();
+          const answer = ans.toLowerCase().trim();
+          if (answer === 'yes' || answer === 'y') {
+            console.log('\n⚙ Switching to RSA encryption...');
+            // Switch to RSA mode
+            process.env.ENCRYPTION_TYPE = 'RSA';
+            const dataDir = process.env.DATA_DIR || './data';
+            const rsaKeyPair = loadOrGenerateRSAKeyPair(dataDir);
+            console.log(
+              '\n💡 Tip: To make this permanent, set ENCRYPTION_TYPE=RSA in your .env file'
+            );
+            resolve(rsaKeyPair);
+          } else {
+            console.log(
+              '\n⚙ Setup cancelled. Please either:\n' +
+                '  1. Set ENCRYPTION_TYPE=RSA in your .env file, or\n' +
+                '  2. Use a Hedera account with a SECP256K1 key'
+            );
+            reject(
+              new Error(
+                'ECIES encryption requires a SECP256K1 key. Setup cancelled by user.'
+              )
+            );
+          }
+        }
+      );
+    });
+  }
+
+  // Now derive the public key (safe because we verified it's SECP256K1)
+  const { publicKeyHex } = derivePublicKeyFromHederaKey(operatorPrivateKey);
+
+  // Determine the curve to use
+  const curve = 'secp256k1';
+
+  console.log(`✓ ECIES key pair derived (${keyType})`);
+
+  return {
+    publicKey: {
+      type: 'ECIES',
+      key: publicKeyHex,
+      curve: curve,
+    },
+    privateKey: {
+      type: 'ECIES',
+      key: keyHex,
+      curve: curve,
+    },
+  };
 }
 
 /**
