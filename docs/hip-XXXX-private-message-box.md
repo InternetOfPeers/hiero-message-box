@@ -221,15 +221,23 @@ The topic memo SHOULD display the owner's details in plain text. Although it use
 
 #### First message
 
-The first message in a message box topic MUST contain the public key and encryption metadata. This message MUST use JSON encoding and follow these structures:
+The first message in a message box topic MUST contain the public key, encryption metadata, and a cryptographic signature proving ownership. This message MUST use JSON encoding and follow a two-part structure with `payload` and `proof` sections.
 
 **RSA Format:**
 
 ```json
 {
-  "type": "PUBLIC_KEY",
-  "publicKey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhki...",
-  "encryptionType": "RSA"
+  "payload": {
+    "encryptionType": "RSA",
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhki...",
+    "type": "PUBLIC_KEY"
+  },
+  "proof": {
+    "accountId": "0.0.12345",
+    "signerPublicKey": "a1b2c3d4...",
+    "signerKeyType": "ED25519",
+    "signature": "d5e6f7g8..."
+  }
 }
 ```
 
@@ -237,26 +245,59 @@ The first message in a message box topic MUST contain the public key and encrypt
 
 ```json
 {
-  "type": "PUBLIC_KEY",
-  "publicKey": {
-    "type": "ECIES",
-    "key": "03a1b2c3d4e5f6...",
-    "curve": "secp256k1"
+  "payload": {
+    "encryptionType": "ECIES",
+    "publicKey": {
+      "curve": "secp256k1",
+      "key": "03a1b2c3d4e5f6...",
+      "type": "ECIES"
+    },
+    "type": "PUBLIC_KEY"
   },
-  "encryptionType": "ECIES"
+  "proof": {
+    "accountId": "0.0.12345",
+    "signerPublicKey": "02a1b2c3d4...",
+    "signerKeyType": "ECDSA_SECP256K1",
+    "signature": "d5e6f7g8..."
+  }
 }
 ```
 
-**Fields:**
+**Payload Fields:**
 
-- `type`: MUST be the string `"PUBLIC_KEY"`
 - `encryptionType`: MUST be either `"RSA"` or `"ECIES"`
 - `publicKey`:
   - For RSA: PEM-encoded RSA-2048 public key string
   - For ECIES: Object containing:
-    - `type`: MUST be `"ECIES"`
-    - `key`: Hex-encoded public key (33 bytes for compressed secp256k1)
     - `curve`: MUST be `"secp256k1"` (only supported curve)
+    - `key`: Hex-encoded public key (33 bytes for compressed secp256k1)
+    - `type`: MUST be `"ECIES"`
+- `type`: MUST be the string `"PUBLIC_KEY"`
+
+**Proof Fields:**
+
+- `accountId`: The Hiero account ID that owns this message box (format: "shard.realm.num")
+- `signerPublicKey`: Hex-encoded public key of the account (from Hiero account key)
+- `signerKeyType`: MUST be either `"ED25519"` or `"ECDSA_SECP256K1"`
+- `signature`: Hex-encoded signature of the canonical JSON representation of the payload
+
+**Signature Generation:**
+
+1. Serialize the `payload` object using canonical JSON (keys sorted alphabetically)
+2. Sign the canonical JSON string with the message box owner's Hiero private key
+3. Encode the signature in hexadecimal format
+4. Include the signature and signer's public key in the `proof` section
+
+**Signature Verification:**
+
+Senders MUST verify the signature before sending messages:
+
+1. Retrieve the message box owner's public key from Mirror Node API
+2. Verify that `proof.signerPublicKey` matches the account's public key
+3. Verify that `proof.accountId` matches the intended recipient
+4. Canonicalize the `payload` object (sort keys alphabetically)
+5. Verify the signature using the canonical JSON and the account's public key
+6. If verification fails: warn user and refuse to send message
 
 ### Message Format
 
@@ -392,21 +433,30 @@ All messages after the first MUST be encrypted using the published public key. M
 1. Generate or load encryption key pair (RSA or ECIES)
 2. If ECIES and account uses ED25519: MUST fallback to RSA or fail with clear error
 3. Create new HCS topic with memo referencing the account
-4. Submit public key as first message to the topic
-5. Update account memo with message box topic ID in HIP-XXXX format
+4. Set the topic admin key to the message box owner's public key
+5. Prepare the payload containing public key and encryption type
+6. Sign the canonical JSON representation of the payload with the owner's private key
+7. Construct first message with both `payload` and `proof` sections
+8. Submit signed public key message as first message to the topic
+9. Update account memo with message box topic ID in HIP-XXXX format
 
 #### Sending Messages
 
 1. Query recipient account memo via Mirror Node
 2. Extract message box topic ID
 3. Retrieve first message from topic via Mirror Node
-4. **MUST verify that the first message signature matches the intended recipient admin key**
-   - If mismatch detected: warn user and refuse to send message
-   - This prevents sending messages to compromised or fraudulent message boxes
-5. Parse public key and encryption type
-6. Validate encryption type is supported
-7. Encrypt message using appropriate algorithm
-8. Submit encrypted message to topic via HCS
+4. Parse the first message as JSON with `payload` and `proof` structure
+5. **MUST verify ownership signature:**
+   - Retrieve recipient's public key from Mirror Node API
+   - Verify `proof.signerPublicKey` matches the account's public key
+   - Verify `proof.accountId` matches the intended recipient
+   - Canonicalize the `payload` object (alphabetically sort all keys)
+   - Verify signature using canonical JSON and account's public key
+   - If verification fails: warn user and refuse to send message
+6. Extract public key and encryption type from verified payload
+7. Validate encryption type is supported
+8. Encrypt message using appropriate algorithm
+9. Submit encrypted message to topic via HCS
 
 #### Receiving Messages
 
@@ -678,25 +728,32 @@ The implementation fully demonstrates all aspects of this specification and serv
 
 1. **Message Box Library** (`src/lib/message-box.js`):
    - Complete message box setup and removal functionality
-   - Encrypted message sending with format selection
+   - Two-key system support (payer and owner separation)
+   - Cryptographic signature generation for ownership proof
+   - Signature verification before sending messages
+   - Encrypted message sending with format selection (JSON/CBOR)
    - Real-time message polling and historical retrieval
    - Key pair management for both RSA and ECIES modes
    - Automatic encryption type detection and routing
-   - Message box ownership verification before sending messages
+   - Canonical JSON serialization for deterministic signatures
 
-2. **Encryption Library** (`src/lib/common.js`):
+2. **Encryption Library** (`src/lib/crypto.js`):
    - RSA-2048 hybrid encryption/decryption (AES-256-CBC + RSA-OAEP)
    - ECIES encryption/decryption (ECDH + AES-256-GCM)
    - Custom CBOR encoder/decoder (RFC 8949 compliant)
    - Automatic format detection (JSON/CBOR/plaintext)
    - Encryption type detection and validation
+   - Message signing and signature verification (ED25519, ECDSA_SECP256K1)
+   - DER encoding helpers for cryptographic keys
 
 3. **Hedera Integration** (`src/lib/hedera.js`):
    - Client initialization for testnet and mainnet
    - Account memo read via Mirror Node and update via HCS
+   - Account public key retrieval from Mirror Node API
    - Topic creation and message submission
    - Complete Mirror Node API integration with message chunking support
    - Hiero key parsing and public key derivation (secp256k1, ED25519)
+   - Transaction execution and signing helpers
 
 4. **Command-Line Tools**:
    - `setup-message-box.js`: Complete setup flow with key generation/verification

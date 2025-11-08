@@ -28,6 +28,14 @@ On first setup, the program generates/derives encryption keys, creates a Hedera 
 
 ## Features
 
+- **Two-Key System**: Separates transaction payer from message box owner
+  - **PAYER_PRIVATE_KEY**: Pays for all Hedera transactions
+  - **MESSAGE_BOX_OWNER_PRIVATE_KEY**: Signs messages to prove ownership
+  - Enables third-party services to pay for users while maintaining user control
+- **Ownership Verification**: Cryptographic signatures prove message box ownership
+  - First message signed with owner's Hedera private key
+  - Senders verify signature against Mirror Node before sending
+  - Prevents sending to compromised or fraudulent message boxes
 - **Dual Encryption Support**: Choose between RSA-2048 or ECIES (Elliptic Curve Integrated Encryption Scheme)
   - **RSA Mode**: Traditional RSA-2048 keys stored in `data/` folder (works with all key types)
   - **ECIES Mode**: Uses your Hedera operator's SECP256K1 key (no separate key files needed)
@@ -66,16 +74,26 @@ On first setup, the program generates/derives encryption keys, creates a Hedera 
 4. Edit `.env` and add your Hedera account details:
 
 ```text
-# Hedera Account Configuration
-HEDERA_ACCOUNT_ID=0.0.xxxxx
-HEDERA_PRIVATE_KEY=302e020100300506032b657004220420...
+# Two-Key System Configuration
+# PAYER_PRIVATE_KEY: Account that pays for all Hedera transactions
+PAYER_ACCOUNT_ID=0.0.xxxxx
+PAYER_PRIVATE_KEY=302e020100300506032b657004220420...
+
+# MESSAGE_BOX_OWNER_PRIVATE_KEY: Account that owns and signs the message box
+# - If not set, defaults to PAYER_PRIVATE_KEY (operator owns the message box)
+# - Allows third-party services to pay for transactions on behalf of users
+MESSAGE_BOX_OWNER_ACCOUNT_ID=0.0.xxxxx
+MESSAGE_BOX_OWNER_PRIVATE_KEY=302e020100300506032b657004220420...
 
 # Encryption Configuration (optional - defaults to RSA)
 # Options: RSA, ECIES
 # RSA: Uses RSA-2048 keys (generated and stored in data/ folder)
-# ECIES: Uses operator's SECP256K1 key for encryption (derived from HEDERA_PRIVATE_KEY)
+# ECIES: Uses operator's SECP256K1 key for encryption (derived from MESSAGE_BOX_OWNER_PRIVATE_KEY)
 #        Note: ECIES requires SECP256K1 - ED25519 keys are not supported
 ENCRYPTION_TYPE=RSA
+
+# Data directory for RSA keys (optional - defaults to ./data)
+RSA_DATA_DIR=./data
 
 # Network Configuration (optional - defaults to testnet)
 HEDERA_NETWORK=testnet
@@ -240,30 +258,36 @@ Uses ECDH (secp256k1) + AES-256-GCM. Provides forward secrecy with ephemeral key
 
 The codebase is organized into three main modules:
 
-1. **`lib/common.js`**: Utility functions
+1. **`lib/crypto.js`**: Cryptographic operations
    - Environment variable loading from `.env` file
    - RSA hybrid encryption/decryption (AES-256-CBC + RSA-2048-OAEP)
    - ECIES encryption/decryption (ECDH + AES-256-GCM)
    - Encryption type detection and routing
    - Custom CBOR encoder/decoder implementation (RFC 8949 compliant)
+   - Message signing and signature verification (ED25519, ECDSA_SECP256K1)
+   - DER encoding helpers for public/private keys
 
 2. **`lib/hedera.js`**: Hedera blockchain operations
    - Client initialization (testnet/mainnet)
    - Account memo read (via Mirror Node) and update (via Hedera SDK)
-   - Account validation using Mirror Node API
+   - Account validation and public key retrieval using Mirror Node API
    - Topic creation and message submission
    - Mirror Node URL configuration
    - Topic message queries with pagination support
    - Hedera key parsing and public key derivation (SECP256K1, ED25519)
+   - Transaction execution and signing helpers
 
 3. **`lib/message-box.js`**: Core message box logic
-   - Message box setup with key verification and encryption type selection
+   - Two-key system support (payer and owner separation)
+   - Message box setup with ownership signature generation
    - RSA key pair generation and management
    - ECIES key derivation from operator credentials
-   - Public key publishing and retrieval (with encryption type metadata)
+   - Public key publishing with cryptographic signature proof
+   - Signature verification before sending messages
    - Message encryption and sending (JSON/CBOR formats, auto-detecting encryption type)
    - Real-time message polling with sequence tracking
    - Automatic format and encryption type detection and decoding
+   - Canonical JSON serialization for deterministic signatures
 
 ### Mirror Node API
 
@@ -280,29 +304,48 @@ All messages submitted to the topic use either JSON or CBOR encoding with a `typ
 
 **Public Key Message** (first message in topic, always JSON):
 
-RSA format:
+RSA format with ownership proof:
 
 ```json
 {
-  "type": "PUBLIC_KEY",
-  "publicKey": "-----BEGIN PUBLIC KEY-----\n...",
-  "encryptionType": "RSA"
-}
-```
-
-ECIES format:
-
-```json
-{
-  "type": "PUBLIC_KEY",
-  "publicKey": {
-    "type": "ECIES",
-    "key": "03a1b2c3...",
-    "curve": "secp256k1"
+  "payload": {
+    "encryptionType": "RSA",
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhki...",
+    "type": "PUBLIC_KEY"
   },
-  "encryptionType": "ECIES"
+  "proof": {
+    "accountId": "0.0.12345",
+    "signerPublicKey": "a1b2c3d4...",
+    "signerKeyType": "ED25519",
+    "signature": "d5e6f7g8..."
+  }
+}
 }
 ```
+
+ECIES format with ownership proof:
+
+```json
+{
+  "payload": {
+    "encryptionType": "ECIES",
+    "publicKey": {
+      "curve": "secp256k1",
+      "key": "03a1b2c3d4e5f6...",
+      "type": "ECIES"
+    },
+    "type": "PUBLIC_KEY"
+  },
+  "proof": {
+    "accountId": "0.0.12345",
+    "signerPublicKey": "02a1b2c3d4...",
+    "signerKeyType": "ECDSA_SECP256K1",
+    "signature": "d5e6f7g8..."
+  }
+}
+```
+
+The `proof` section contains a cryptographic signature of the `payload` using the message box owner's Hedera private key. Senders verify this signature against the account's public key from Mirror Node before sending messages, preventing fraudulent message boxes.
 
 **Encrypted Message (JSON format)**:
 
@@ -407,8 +450,15 @@ See [test/README.md](test/README.md) for detailed test documentation.
 Required variables:
 
 ```text
-HEDERA_ACCOUNT_ID=0.0.xxxxx
-HEDERA_PRIVATE_KEY=302e020100300506032b657004220420...
+# Transaction payer
+PAYER_ACCOUNT_ID=0.0.xxxxx
+PAYER_PRIVATE_KEY=302e020100300506032b657004220420...
+
+# Message box owner
+MESSAGE_BOX_OWNER_ACCOUNT_ID=0.0.xxxxx
+MESSAGE_BOX_OWNER_PRIVATE_KEY=302e020100300506032b657004220420...
+
+# Data directory for RSA keys
 RSA_DATA_DIR=./data
 ```
 
@@ -439,21 +489,28 @@ MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
 ## Security Notes
 
 - Never commit `.env` or private keys
+- **Two-key system**: Separates payment from ownership
+  - `PAYER_PRIVATE_KEY`: Pays for transactions
+  - `MESSAGE_BOX_OWNER_PRIVATE_KEY`: Proves ownership via signatures
+  - Enables third-party payment while maintaining user control
 - RSA mode: private key in `data/rsa_private.pem` for local decryption only
 - ECIES mode: operator key in `.env` used for transactions and decryption
 - ECIES provides forward secrecy (unique ephemeral key per message)
 - **Signature verification**: Message box ownership uses cryptographic signatures with canonical JSON serialization
+  - First message signed with owner's Hedera private key
+  - Senders verify signature against account's public key from Mirror Node
   - Ensures deterministic signature verification regardless of JSON property ordering
   - Keys are sorted alphabetically before signing to prevent signature mismatch
-  - Verifies against account's public key from Mirror Node as authoritative source
+  - Prevents sending messages to compromised or fraudulent message boxes
 
 ## Troubleshooting
 
 ### Common Issues
 
-- **Missing credentials**: Ensure `.env` exists with valid `HEDERA_ACCOUNT_ID` and `HEDERA_PRIVATE_KEY`
+- **Missing credentials**: Ensure `.env` exists with valid `PAYER_ACCOUNT_ID`, `PAYER_PRIVATE_KEY`, `MESSAGE_BOX_OWNER_ACCOUNT_ID`, and `MESSAGE_BOX_OWNER_PRIVATE_KEY`
 - **Message box not found**: Recipient needs to run `npm run setup-message-box`
 - **Cannot decrypt**: Keys don't match topic—restore original keys or create new message box
+- **Signature verification failed**: Message box signature doesn't match recipient's public key—possible fraudulent message box
 - **Encryption mismatch**: `ENCRYPTION_TYPE` in `.env` doesn't match message box
 - **ECIES with ED25519**: ED25519 doesn't support ECIES—use RSA or SECP256K1 account
 - **Mirror Node errors**: Check internet and verify `MIRROR_NODE_URL` matches network
