@@ -131,7 +131,6 @@ The Hiero Message Box supports two encryption methods:
 | Setup Time       | ~50ms (key generation)     | <1ms (key derivation)  |
 | Security         | RSA-2048 + AES-256-CBC     | ECDH + AES-256-GCM     |
 | Files to Backup  | `data/rsa_*.pem`           | None (uses .env)       |
-| Forward Secrecy  | Yes (ephemeral keys)       | Yes (ephemeral keys)   |
 
 **Use RSA if:**
 
@@ -144,7 +143,6 @@ The Hiero Message Box supports two encryption methods:
 - Your Hedera account uses SECP256K1 keys
 - You want to use your Hedera key for everything
 - You want faster setup with no key file management
-- You prefer forward secrecy (each message uses unique ephemeral keys)
 
 **To enable ECIES**, add to your `.env`:
 
@@ -260,7 +258,7 @@ Hybrid encryption: AES-256-CBC for messages + RSA-2048-OAEP for key exchange. Su
 
 ### ECIES Mode
 
-Uses ECDH (secp256k1) + AES-256-GCM. Provides forward secrecy with ephemeral keys, smaller public keys (33 bytes vs 294), and derives keys from your operator credentials. **Requires SECP256K1** (ED25519 not supported).
+Uses ECDH (secp256k1) + AES-256-GCM. Provides smaller public keys (33 bytes vs 294), and derives keys from your operator credentials. **Requires SECP256K1** (ED25519 not supported).
 
 ## Architecture
 
@@ -504,7 +502,6 @@ MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
   - Enables third-party payment while maintaining user control
 - RSA mode: private key in `data/rsa_private.pem` for local decryption only
 - ECIES mode: operator key in `.env` used for transactions and decryption
-- ECIES provides forward secrecy (unique ephemeral key per message)
 - **Signature verification**: Message box ownership uses cryptographic signatures with canonical JSON serialization
   - First message signed with owner's Hedera private key
   - Senders verify signature against account's public key from Mirror Node
