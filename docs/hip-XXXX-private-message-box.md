@@ -74,7 +74,7 @@ The account memo field provides a natural, standardized location for advertising
 - User-controlled and updateable
 - No protocol changes required
 
-The `[HIP-XXXX:0.0.xxxxx]` format was chosen to:
+The `[HIP-1334:0.0.xxxxx]` format was chosen to:
 
 - Be clearly identifiable and parseable
 - Allow future extensions with different HIP numbers
@@ -171,37 +171,35 @@ The message box system consists of three components:
 An account advertises its message box by including the following format in its account memo:
 
 ```text
-[HIP-XXXX:<topic-id>]
+[HIP-1334:<topic-id>]
 ```
-
-> **Note**: "HIP-XXXX" will be replaced with the actual HIP number (e.g., "HIP-2345") once assigned by the HIP editors. Throughout this document, we use the placeholder "XXXX" to represent the assigned number.
 
 **Requirements:**
 
 - `<topic-id>` MUST be a valid Hiero topic ID (format: `shard.realm.num`)
-- The bracket notation `[HIP-XXXX:...]` MUST be present
+- The bracket notation `[HIP-1334:...]` MUST be present
 - The memo MAY contain additional text before or after the bracketed section
-- The topic ID SHOULD be the only HIP-XXXX reference in the memo
-- If multiple HIP-XXXX references exist, implementations SHOULD use the first one
+- The topic ID SHOULD be the only HIP-1334 reference in the memo
+- If multiple HIP-1334 references exist, implementations SHOULD use the first one
 
 **Examples:**
 
 ```text
-[HIP-XXXX:0.0.123456] is my message box. Send me private messages there.
+[HIP-1334:0.0.123456] is my message box. Send me private messages there.
 ```
 
 ```text
-すべての通信を暗号化してください [HIP-XXXX:0.0.456789]
+すべての通信を暗号化してください [HIP-1334:0.0.456789]
 ```
 
 ```text
-صندوق رسائلي هو [HIP-XXXX:0.0.456789]. سيتم تجاهل النص العادي.
+صندوق رسائلي هو [HIP-1334:0.0.456789]. سيتم تجاهل النص العادي.
 ```
 
 **Discovery Process:**
 
 1. Query the account's memo via Mirror Node REST API: `GET /api/v1/accounts/{accountId}`
-2. Parse the memo field for the pattern `\[HIP-XXXX:(0\.0\.\d+)\]`
+2. Parse the memo field for the pattern `\[HIP-1334:(0\.0\.\d+)\]`
 3. Extract the topic ID
 4. Retrieve the first message from the topic to get the public key
 
@@ -209,16 +207,16 @@ An account advertises its message box by including the following format in its a
 
 #### Topic Memo
 
-The topic memo SHOULD display the owner's details in plain text. Although it uses the HIP-XXXX format, it uses the account ID rather than the message box ID used by the account memo:
+The topic memo SHOULD display the owner's details in plain text. Although it uses the HIP-1334 format, it uses the account ID rather than the message box ID used by the account memo:
 
 ```text
-[HIP-XXXX:<account-id>]
+[HIP-1334:<account-id>]
 ```
 
 **Example:**
 
 ```text
-[HIP-XXXX:0.0.1234] listens here for HIP-XXXX encrypted messages.
+[HIP-1334:0.0.1234] listens here for HIP-1334 encrypted messages.
 ```
 
 #### First message
@@ -232,7 +230,7 @@ The first message in a message box topic MUST contain the public key, encryption
   "payload": {
     "encryptionType": "RSA",
     "publicKey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhki...",
-    "type": "PUBLIC_KEY"
+    "type": "HIP-1334_PUBLIC_KEY"
   },
   "proof": {
     "accountId": "0.0.12345",
@@ -254,7 +252,7 @@ The first message in a message box topic MUST contain the public key, encryption
       "key": "03a1b2c3d4e5f6...",
       "type": "ECIES"
     },
-    "type": "PUBLIC_KEY"
+    "type": "HIP-1334_PUBLIC_KEY"
   },
   "proof": {
     "accountId": "0.0.12345",
@@ -274,7 +272,7 @@ The first message in a message box topic MUST contain the public key, encryption
     - `curve`: MUST be `"secp256k1"` (only supported curve)
     - `key`: Hex-encoded public key (33 bytes for compressed secp256k1)
     - `type`: MUST be `"ECIES"`
-- `type`: MUST be the string `"PUBLIC_KEY"`
+- `type`: MUST be the string `"HIP-1334_PUBLIC_KEY"`
 
 **Proof Fields:**
 
@@ -309,7 +307,7 @@ All messages after the first MUST be encrypted using the published public key. M
 
 ```json
 {
-  "type": "ENCRYPTED_MESSAGE",
+  "type": "HIP-1334_ENCRYPTED_MESSAGE",
   "format": "json",
   "data": {
     "type": "RSA",
@@ -324,7 +322,7 @@ All messages after the first MUST be encrypted using the published public key. M
 
 ```json
 {
-  "type": "ENCRYPTED_MESSAGE",
+  "type": "HIP-1334_ENCRYPTED_MESSAGE",
   "format": "json",
   "data": {
     "type": "ECIES",
@@ -339,7 +337,7 @@ All messages after the first MUST be encrypted using the published public key. M
 
 **Top-level Fields:**
 
-- `type`: MUST be the string `"ENCRYPTED_MESSAGE"`
+- `type`: MUST be the string `"HIP-1334_ENCRYPTED_MESSAGE"`
 - `format`: MUST be either `"json"` or `"cbor"`
 - `data`: Object containing encryption-specific fields
 
@@ -440,7 +438,7 @@ All messages after the first MUST be encrypted using the published public key. M
 6. Sign the canonical JSON representation of the payload with the owner's private key
 7. Construct first message with both `payload` and `proof` sections
 8. Submit signed public key message as first message to the topic
-9. Update account memo with message box topic ID in HIP-XXXX format
+9. Update account memo with message box topic ID in HIP-1334 format
 
 #### Sending Messages
 
@@ -467,8 +465,8 @@ All messages after the first MUST be encrypted using the published public key. M
 3. For each message:
    - Detect format (JSON or CBOR) by examining first byte
    - Parse message structure
-   - If type is ENCRYPTED_MESSAGE: decrypt using private key
-   - If type is PUBLIC_KEY: ignore or use for verification
+   - If type is HIP-1334_ENCRYPTED_MESSAGE: decrypt using private key
+   - If type is HIP-1334_PUBLIC_KEY: ignore or use for verification
 4. Handle chunked messages transparently (reassembled by Mirror Node)
 
 ### Mirror Node Integration
@@ -531,14 +529,14 @@ Implementations MUST handle the following error cases:
 **Invalid Account:**
 
 - Account does not exist
-- Account memo does not contain HIP-XXXX format
+- Account memo does not contain HIP-1334 format
 - Action: Return error indicating no message box configured
 
 **Invalid Topic:**
 
 - Topic does not exist
 - Topic has no messages
-- First message is not a valid PUBLIC_KEY message
+- First message is not a valid HIP-1334_PUBLIC_KEY message
 - First message signature does not match recipient admin key\*\*
 - Action: Return error indicating invalid message box configuration
 
@@ -676,7 +674,7 @@ Accounts without a message box in their memo are unaffected and can continue usi
    - Generate RSA or ECIES key pair
    - Create HCS topic
    - Publish public key as first message
-   - Update account memo with topic ID [HIP-XXXX:<TOPIC_ID>]
+   - Update account memo with topic ID [HIP-1334:<TOPIC_ID>]
 
 2. **Sending Messages:**
    - Query account memo to find the topic ID

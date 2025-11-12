@@ -120,7 +120,7 @@ async function setupMessageBox(client, dataDir, accountId, options = {}) {
   if (needsNewMessageBox) {
     const result = await createTopic(
       client,
-      `[HIP-XXXX:${accountId}] ${accountId} listens here for HIP-XXXX encrypted messages.`,
+      `[HIP-1334:${accountId}] ${accountId} listens here for HIP-1334 encrypted messages.`,
       ownerPrivateKey
     );
     if (!result.success)
@@ -138,7 +138,7 @@ async function setupMessageBox(client, dataDir, accountId, options = {}) {
     await updateAccountMemo(
       client,
       accountId,
-      `[HIP-XXXX:${newMessageBoxId}] If you want to contact me, send HIP-XXXX encrypted messages to ${newMessageBoxId}.`,
+      `[HIP-1334:${newMessageBoxId}] If you want to contact me, send HIP-1334 encrypted messages to ${newMessageBoxId}.`,
       ownerPrivateKey
     );
     console.log(
@@ -305,12 +305,12 @@ async function sendMessage(client, recipientAccountId, message, options = {}) {
 
   const messageData = useCBOR
     ? encodeCBOR({
-        type: 'ENCRYPTED_MESSAGE',
+        type: 'HIP-1334_ENCRYPTED_MESSAGE',
         format: 'cbor',
         data: encryptedPayload,
       })
     : JSON.stringify({
-        type: 'ENCRYPTED_MESSAGE',
+        type: 'HIP-1334_ENCRYPTED_MESSAGE',
         format: 'json',
         data: encryptedPayload,
       });
@@ -534,14 +534,14 @@ function formatMessage(msg, privateKey, encryptionType) {
 
   const { parsed, format, raw } = parseMessageContent(messageBuffer);
 
-  if (parsed && parsed.type === 'ENCRYPTED_MESSAGE') {
+  if (parsed && parsed.type === 'HIP-1334_ENCRYPTED_MESSAGE') {
     try {
       const decrypted = decryptMessage(parsed.data, privateKey);
       return `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Encrypted message from ${sender}:\n${decrypted}`;
     } catch (error) {
       return `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Encrypted message from ${sender} (cannot decrypt):\n${error.message}`;
     }
-  } else if (parsed && parsed.type === 'PUBLIC_KEY') {
+  } else if (parsed && parsed.type === 'HIP-1334_PUBLIC_KEY') {
     const keyInfo = parsed.encryptionType ? ` (${parsed.encryptionType})` : '';
     const keyPreview = parsed.publicKey
       ? typeof parsed.publicKey === 'string'
@@ -581,7 +581,7 @@ async function getPublicKeyFromFirstMessage(message) {
 
     const payload = firstMessage.payload;
 
-    if (payload.type === 'PUBLIC_KEY' && payload.publicKey) {
+    if (payload.type === 'HIP-1334_PUBLIC_KEY' && payload.publicKey) {
       const encryptionType = payload.encryptionType || 'RSA';
       console.log(`✓ Public key retrieved from topic (${encryptionType})`);
 
@@ -695,7 +695,7 @@ async function publishPublicKey(
 
   // Create the encryption public key payload (what senders will use to encrypt messages)
   const payload = {
-    type: 'PUBLIC_KEY',
+    type: 'HIP-1334_PUBLIC_KEY',
     publicKey,
     encryptionType,
   };
@@ -752,7 +752,8 @@ async function checkMessageBoxStatus(messageBoxId) {
       const payload = parsed.payload;
       return {
         exists: true,
-        hasPublicKey: payload.type === 'PUBLIC_KEY' && payload.publicKey,
+        hasPublicKey:
+          payload.type === 'HIP-1334_PUBLIC_KEY' && payload.publicKey,
       };
     } catch {
       return { exists: true, hasPublicKey: false };
@@ -990,12 +991,12 @@ function getPublicKeyFilePath(dataDir) {
 }
 
 /**
- * Extract message box ID from memo. Expected format: "[HIP-XXXX:0.0.xxxxx]"
+ * Extract message box ID from memo. Expected format: "[HIP-1334:0.0.xxxxx]"
  * @param {string} memo
  * @returns {string|null} Message box ID or null if not found
  */
 function extractMessageBoxIdFromMemo(memo) {
-  const match = memo.match(/\[HIP-XXXX:(0\.0\.\d+)\]/);
+  const match = memo.match(/\[HIP-1334:(0\.0\.\d+)\]/);
   return match ? match[1] : null;
 }
 

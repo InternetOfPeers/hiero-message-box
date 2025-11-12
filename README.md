@@ -2,6 +2,8 @@
 
 Hiero Message Box is a simple way for users to set up a message box and receive private messages, for example getting alerts about security communications about their assets or wallet, etc.
 
+This implementation follows the specifications defined in the [HIP-1334](https://github.com/hiero-ledger/hiero-improvement-proposals/pull/1334).
+
 [View the interactive presentation](https://internetofpeers.org/hiero-message-box/presentation.html) to visualize the message box flow.
 
 ## Quick start
@@ -32,7 +34,7 @@ Users can also check for historical messages using this command:
 npm run check-messages -- [start-sequence] [end-sequence]
 ```
 
-On first setup, the program generates/derives encryption keys, creates a Hedera topic as your message box, and updates your account memo with the topic ID in HIP-XXXX format.
+On first setup, the program generates/derives encryption keys, creates a Hedera topic as your message box, and updates your account memo with the topic ID in HIP-1334 format.
 
 ## Features
 
@@ -129,7 +131,7 @@ The Hiero Message Box supports two encryption methods:
 | Setup Time       | ~50ms (key generation)     | <1ms (key derivation)  |
 | Security         | RSA-2048 + AES-256-CBC     | ECDH + AES-256-GCM     |
 | Files to Backup  | `data/rsa_*.pem`           | None (uses .env)       |
-| Forward Secrecy  | No                         | Yes (ephemeral keys)   |
+| Forward Secrecy  | Yes (ephemeral keys)       | Yes (ephemeral keys)   |
 
 **Use RSA if:**
 
@@ -164,7 +166,7 @@ The setup process:
 2. Checks existing message box in account memo
 3. Verifies keys can decrypt messages
 4. Creates new topic if needed, publishes public key
-5. Updates account memo with topic ID: `[HIP-XXXX:0.0.xxxxx]`
+5. Updates account memo with topic ID: `[HIP-1334:0.0.xxxxx]`
 
 ### Listen for New Messages
 
@@ -319,7 +321,7 @@ RSA format with ownership proof:
   "payload": {
     "encryptionType": "RSA",
     "publicKey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhki...",
-    "type": "PUBLIC_KEY"
+    "type": "HIP-1334_PUBLIC_KEY"
   },
   "proof": {
     "accountId": "0.0.12345",
@@ -327,7 +329,6 @@ RSA format with ownership proof:
     "signerKeyType": "ED25519",
     "signature": "d5e6f7g8..."
   }
-}
 }
 ```
 
@@ -342,7 +343,7 @@ ECIES format with ownership proof:
       "key": "03a1b2c3d4e5f6...",
       "type": "ECIES"
     },
-    "type": "PUBLIC_KEY"
+    "type": "HIP-1334_PUBLIC_KEY"
   },
   "proof": {
     "accountId": "0.0.12345",
@@ -361,7 +362,7 @@ RSA:
 
 ```json
 {
-  "type": "ENCRYPTED_MESSAGE",
+  "type": "HIP-1334_ENCRYPTED_MESSAGE",
   "format": "json",
   "data": {
     "type": "RSA",
@@ -376,7 +377,7 @@ ECIES:
 
 ```json
 {
-  "type": "ENCRYPTED_MESSAGE",
+  "type": "HIP-1334_ENCRYPTED_MESSAGE",
   "format": "json",
   "data": {
     "type": "ECIES",
