@@ -96,8 +96,10 @@ config.mirrorNodeUrl = process.env.MIRROR_NODE_URL || _defaultMirrorNodeUrl;
 // message instead of a cryptic error deep inside a library call.
 if (!config.payerAccountId) throw new Error('PAYER_ACCOUNT_ID is required.');
 if (!config.payerPrivateKey) throw new Error('PAYER_PRIVATE_KEY is required.');
-if (!config.messageBoxOwnerAccountId) throw new Error('MESSAGE_BOX_OWNER_ACCOUNT_ID is required.');
-if (!config.messageBoxOwnerPrivateKey) throw new Error('MESSAGE_BOX_OWNER_PRIVATE_KEY is required.');
+if (!config.messageBoxOwnerAccountId)
+  throw new Error('MESSAGE_BOX_OWNER_ACCOUNT_ID is required.');
+if (!config.messageBoxOwnerPrivateKey)
+  throw new Error('MESSAGE_BOX_OWNER_PRIVATE_KEY is required.');
 
 // == Exports =================================================================
 

@@ -595,10 +595,14 @@ function formatMessage(msg, privateKey, encryptionType) {
   }
 
   const publicKeyPayload =
-    parsed && parsed.payload && parsed.payload.type === 'HIP-1334_PUBLIC_KEY' ? parsed.payload : null;
+    parsed && parsed.payload && parsed.payload.type === 'HIP-1334_PUBLIC_KEY'
+      ? parsed.payload
+      : null;
 
   if (publicKeyPayload) {
-    const keyInfo = publicKeyPayload.encryptionType ? ` (${publicKeyPayload.encryptionType})` : '';
+    const keyInfo = publicKeyPayload.encryptionType
+      ? ` (${publicKeyPayload.encryptionType})`
+      : '';
     const keyPreview = publicKeyPayload.publicKey
       ? typeof publicKeyPayload.publicKey === 'string'
         ? publicKeyPayload.publicKey.substring(0, 50) + '...'
@@ -806,12 +810,12 @@ async function checkMessageBoxStatus(messageBoxId) {
         exists: true,
         hasPublicKey: Boolean(
           payload.type === 'HIP-1334_PUBLIC_KEY' &&
-            payload.publicKey &&
-            proof &&
-            proof.accountId &&
-            proof.signerPublicKey &&
-            proof.signerKeyType &&
-            proof.signature
+          payload.publicKey &&
+          proof &&
+          proof.accountId &&
+          proof.signerPublicKey &&
+          proof.signerKeyType &&
+          proof.signature
         ),
       };
     } catch {

@@ -38,11 +38,7 @@ async function main() {
     const accountId = config.messageBoxOwnerAccountId;
     console.log(`⚙ Checking messages for account ${accountId}`);
 
-    const messages = await checkMessages(
-      accountId,
-      startSequence,
-      endSequence
-    );
+    const messages = await checkMessages(accountId, startSequence, endSequence);
 
     if (messages.length === 0) {
       console.log('✓ No messages found in the specified range\n');

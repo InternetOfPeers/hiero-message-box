@@ -17,9 +17,7 @@ async function main() {
     const topicId = args[0];
     client = initializeClient();
     const accountId = config.messageBoxOwnerAccountId;
-    console.log(
-      `⚙ Linking message box ${topicId} to account ${accountId}`
-    );
+    console.log(`⚙ Linking message box ${topicId} to account ${accountId}`);
     await linkMessageBox(client, accountId, topicId);
     client.close();
     process.exit(0);
