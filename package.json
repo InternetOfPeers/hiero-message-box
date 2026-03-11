@@ -15,14 +15,32 @@
     "send-message": "node src/send-message.js",
     "remove-message-box": "node src/remove-message-box.js",
     "format": "prettier --write \"src/**/*.js\"",
-    "test:unit": "node test/unit.test.js",
-    "test:integration": "node test/integration.test.js",
-    "test": "node test/unit.test.js && node test/integration.test.js"
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest test/unit.test.js --detectOpenHandles",
+    "test:integration": "jest test/integration.test.js --runInBand --detectOpenHandles",
+    "test": "jest test/unit.test.js --detectOpenHandles && jest test/integration.test.js --runInBand --detectOpenHandles"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 120000,
+    "testMatch": [
+      "**/test/**/*.test.js"
+    ],
+    "reporters": [
+      "<rootDir>/test/streaming-reporter.js"
+    ],
+    "setupFiles": [
+      "<rootDir>/test/setup.js"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js"
+    ]
   },
   "dependencies": {
     "@hiero-ledger/sdk": "^2.80.0"
   },
   "devDependencies": {
+    "jest": "^30.3.0",
     "prettier": "^3.8.1"
   }
 }

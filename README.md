@@ -329,8 +329,14 @@ The codebase is organized into five modules:
    - Signature verification before sending messages
    - Message encryption and sending (JSON/CBOR formats, auto-detecting encryption type)
    - Real-time message polling with sequence number tracking
-   - Automatic format and encryption type detection and decoding
    - Canonical JSON serialization for deterministic signatures
+
+6. **`lib/format-message.js`**: Message formatting and parsing
+   - Decodes base64 HCS messages and detects encoding (JSON/CBOR/plain)
+   - Formats encrypted messages with decryption (or a `(cannot decrypt)` notice)
+   - Formats public key announcement messages
+   - Formats plain-text messages
+   - Pure utility module with no Hedera client dependency (fully unit-testable)
 
 ### Mirror Node API
 
@@ -446,11 +452,13 @@ Messages are auto-detected (format: JSON/CBOR/plain, encryption: RSA/ECIES) and 
 │   └── lib/
 │       ├── config.js               # Config singleton (env loading, defaults, validation)
 │       ├── crypto.js               # Cryptographic operations (encryption, signing)
+│       ├── format-message.js       # Message formatting and parsing (pure, no I/O)
 │       ├── hedera.js               # Hedera SDK wrappers, client init, key parsing
 │       ├── message-box.js          # Core message box logic (setup, send, poll)
 │       └── utils.js                # General utilities (CBOR encoder/decoder)
 ├── test/
-│   ├── integration.test.js         # Integration test suite
+│   ├── integration.test.js         # End-to-end integration test suite (requires .env)
+│   ├── unit.test.js                # Offline unit tests (no credentials required)
 │   └── README.md                   # Test documentation
 ├── .env                            # Hedera credentials and config (not committed)
 ├── .env.example                    # Example environment file
@@ -473,20 +481,41 @@ npm run check-messages -- [start-sequence-number] [end-sequence-number] # Read m
 npm run send-message -- <account id> <msg> [--cbor] # Send encrypted message to account
 npm run remove-message-box                          # Remove message box (clear account memo)
 npm run format                                      # Format code with Prettier
-npm test                                            # Run integration tests
+npm test                                            # Run all tests (unit + integration)
+npm run test:unit                                   # Run offline unit tests only (no credentials needed)
+npm run test:integration                            # Run end-to-end integration tests only
 ```
 
 **Note:** Use `--` to separate npm options from script arguments when passing parameters.
 
 ## Testing
 
-Run the integration test suite to verify all functionality:
+The project uses [Jest](https://jestjs.io/) as its test runner. There are two test suites:
+
+### Unit Tests (offline)
+
+Test pure logic with no network connection or credentials required:
 
 ```bash
-npm test
+npm run test:unit
 ```
 
-The test suite covers:
+Covers all four exit paths of `formatMessage` in `src/lib/format-message.js`:
+
+- Encrypted message that decrypts successfully
+- Encrypted message that cannot be decrypted (wrong key)
+- Public key announcement message
+- Plain-text / unrecognised content
+
+### Integration Tests (live Hedera)
+
+End-to-end tests that require a configured `.env` file and HBAR balance:
+
+```bash
+npm run test:integration
+```
+
+Covers:
 
 - Message box setup (new and existing)
 - Sending messages (JSON and CBOR formats)
