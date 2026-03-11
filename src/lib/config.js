@@ -81,8 +81,8 @@ const config = {
   // Encryption settings (default: RSA)
   encryptionType: (process.env.ENCRYPTION_TYPE || 'RSA').toUpperCase(),
 
-  // Local storage for RSA key files (default: current working directory)
-  rsaDataDir: process.env.RSA_DATA_DIR || '.',
+  // Local storage for RSA key files (default: ./data)
+  rsaDataDir: process.env.RSA_DATA_DIR || './data',
 };
 
 // Derive mirror node URL default from network if not explicitly set

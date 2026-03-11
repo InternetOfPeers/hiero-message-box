@@ -184,7 +184,12 @@ async function linkMessageBox(client, accountId, topicId) {
   const firstMessage = await getFirstTopicMessage(topicId);
   const content = Buffer.from(firstMessage.message, 'base64').toString('utf8');
   const parsed = JSON.parse(content);
-  if (parsed.proof && parsed.proof.accountId !== accountId) {
+  if (!parsed.proof || !parsed.proof.accountId) {
+    throw new Error(
+      `Topic ${topicId} does not contain a valid ownership proof`
+    );
+  }
+  if (parsed.proof.accountId !== accountId) {
     throw new Error(
       `Topic ${topicId} is configured for account ${parsed.proof.accountId}, not ${accountId}`
     );
@@ -587,12 +592,17 @@ function formatMessage(msg, privateKey, encryptionType) {
     } catch (error) {
       return `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Encrypted message from ${sender} (cannot decrypt):\n${error.message}`;
     }
-  } else if (parsed && parsed.type === 'HIP-1334_PUBLIC_KEY') {
-    const keyInfo = parsed.encryptionType ? ` (${parsed.encryptionType})` : '';
-    const keyPreview = parsed.publicKey
-      ? typeof parsed.publicKey === 'string'
-        ? parsed.publicKey.substring(0, 50) + '...'
-        : JSON.stringify(parsed.publicKey).substring(0, 50) + '...'
+  }
+
+  const publicKeyPayload =
+    parsed && parsed.payload && parsed.payload.type === 'HIP-1334_PUBLIC_KEY' ? parsed.payload : null;
+
+  if (publicKeyPayload) {
+    const keyInfo = publicKeyPayload.encryptionType ? ` (${publicKeyPayload.encryptionType})` : '';
+    const keyPreview = publicKeyPayload.publicKey
+      ? typeof publicKeyPayload.publicKey === 'string'
+        ? publicKeyPayload.publicKey.substring(0, 50) + '...'
+        : JSON.stringify(publicKeyPayload.publicKey).substring(0, 50) + '...'
       : 'N/A';
     return `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Public key${keyInfo} published by ${sender}:\n${keyPreview}`;
   } else {
@@ -611,54 +621,55 @@ async function getPublicKeyFromFirstMessage(message) {
     const firstMessage = JSON.parse(messageContent);
 
     // Require new structure with payload and proof
-    if (!firstMessage.payload) {
+    if (!firstMessage.payload || !firstMessage.proof) {
       throw new Error(
         'First message does not have the required structure with payload and proof'
       );
     }
 
     const payload = firstMessage.payload;
-
-    if (payload.type === 'HIP-1334_PUBLIC_KEY' && payload.publicKey) {
-      const encryptionType = payload.encryptionType || 'RSA';
-      console.log(`✓ Public key retrieved from topic (${encryptionType})`);
-
-      // Return the public key in the format expected by encryptMessage
-      if (encryptionType === 'ECIES') {
-        // For ECIES, payload.publicKey should already be an object with type, key, and curve
-        if (
-          typeof payload.publicKey === 'object' &&
-          payload.publicKey.type === 'ECIES'
-        ) {
-          // Extract raw key if it's in DER format
-          const curve = payload.publicKey.curve || 'secp256k1';
-          const rawKey = extractRawPublicKey(payload.publicKey.key, curve);
-
-          return {
-            type: 'ECIES',
-            key: rawKey,
-            curve: curve,
-          };
-        } else if (typeof payload.publicKey === 'string') {
-          // Legacy format: if it's just a hex string, extract raw key and wrap it
-          const curve =
-            payload.publicKey.length === 66 ? 'secp256k1' : 'ed25519';
-          const rawKey = extractRawPublicKey(payload.publicKey, curve);
-
-          return {
-            type: 'ECIES',
-            key: rawKey,
-            curve: curve,
-          };
-        } else {
-          throw new Error('Invalid ECIES public key format');
-        }
-      } else {
-        // For RSA, return the PEM string directly
-        return payload.publicKey;
-      }
+    if (
+      payload.type !== 'HIP-1334_PUBLIC_KEY' ||
+      !payload.publicKey ||
+      !payload.encryptionType
+    ) {
+      throw new Error('First message does not contain a valid public key');
     }
-    throw new Error('First message does not contain a public key');
+
+    const encryptionType = payload.encryptionType;
+    console.log(`✓ Public key retrieved from topic (${encryptionType})`);
+
+    if (encryptionType === 'ECIES') {
+      if (
+        typeof payload.publicKey !== 'object' ||
+        payload.publicKey.type !== 'ECIES' ||
+        typeof payload.publicKey.key !== 'string'
+      ) {
+        throw new Error(
+          'Invalid ECIES public key format: expected object with type and key'
+        );
+      }
+
+      const curve = payload.publicKey.curve || 'secp256k1';
+      const rawKey = extractRawPublicKey(payload.publicKey.key, curve);
+
+      return {
+        type: 'ECIES',
+        key: rawKey,
+        curve,
+      };
+    }
+
+    if (encryptionType === 'RSA') {
+      if (typeof payload.publicKey !== 'string') {
+        throw new Error('Invalid RSA public key format: expected PEM string');
+      }
+      return payload.publicKey;
+    }
+
+    throw new Error(
+      `Unsupported encryption type in first message: ${encryptionType}`
+    );
   } catch (error) {
     throw new Error(`Failed to get public key from topic: ${error.message}`);
   }
@@ -787,11 +798,21 @@ async function checkMessageBoxStatus(messageBoxId) {
       if (!parsed.payload) {
         return { exists: true, hasPublicKey: false };
       }
+
       const payload = parsed.payload;
+      const proof = parsed.proof;
+
       return {
         exists: true,
-        hasPublicKey:
-          payload.type === 'HIP-1334_PUBLIC_KEY' && payload.publicKey,
+        hasPublicKey: Boolean(
+          payload.type === 'HIP-1334_PUBLIC_KEY' &&
+            payload.publicKey &&
+            proof &&
+            proof.accountId &&
+            proof.signerPublicKey &&
+            proof.signerKeyType &&
+            proof.signature
+        ),
       };
     } catch {
       return { exists: true, hasPublicKey: false };
@@ -1024,4 +1045,5 @@ module.exports = {
   sendMessage,
   pollMessages,
   checkMessages,
+  formatMessage,
 };

@@ -15,7 +15,9 @@
     "send-message": "node src/send-message.js",
     "remove-message-box": "node src/remove-message-box.js",
     "format": "prettier --write \"src/**/*.js\"",
-    "test": "node test/integration.test.js"
+    "test:unit": "node test/unit.test.js",
+    "test:integration": "node test/integration.test.js",
+    "test": "node test/unit.test.js && node test/integration.test.js"
   },
   "dependencies": {
     "@hiero-ledger/sdk": "^2.80.0"

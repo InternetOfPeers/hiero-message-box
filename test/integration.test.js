@@ -58,6 +58,7 @@ async function testSetupMessageBox() {
     messageBoxId = result.messageBoxId;
 
     // Wait for account memo to propagate to Mirror Node
+    console.log('⌛ Waiting for account memo to propagate to Mirror Node...');
     await new Promise(resolve => setTimeout(resolve, 4000));
 
     testPassed(testName);
@@ -76,6 +77,7 @@ async function testSendMessage() {
     await sendMessage(client, testAccountId, testMessage, { useCBOR: false });
 
     // Wait for message to propagate to Mirror Node
+    console.log('⌛ Waiting for message to propagate to Mirror Node...');
     await new Promise(resolve => setTimeout(resolve, 4000));
 
     testPassed(testName);
@@ -94,6 +96,7 @@ async function testSendMessageCBOR() {
     await sendMessage(client, testAccountId, testMessage, { useCBOR: true });
 
     // Wait for message to propagate to Mirror Node
+    console.log('⌛ Waiting for message to propagate to Mirror Node...');
     await new Promise(resolve => setTimeout(resolve, 4000));
 
     testPassed(testName);
@@ -185,6 +188,7 @@ async function testRemoveMessageBox() {
     assert(result.success, 'Remove should succeed');
 
     // Wait for account memo to propagate to Mirror Node
+    console.log('⌛ Waiting for account memo to propagate to Mirror Node...');
     await new Promise(resolve => setTimeout(resolve, 4000));
 
     testPassed(testName);
@@ -210,6 +214,7 @@ async function testLinkMessageBox() {
     );
 
     // Wait for account memo to propagate to Mirror Node
+    console.log('⌛ Waiting for account memo to propagate to Mirror Node...');
     await new Promise(resolve => setTimeout(resolve, 4000));
 
     testPassed(testName);
@@ -296,8 +301,9 @@ async function runTests() {
   try {
     // Initialize
     client = initializeClient();
+    testAccountId = config.messageBoxOwnerAccountId;
 
-    console.log(`\n📋 Test Account: ${config.messageBoxOwnerAccountId}`);
+    console.log(`\n📋 Test Account: ${testAccountId}`);
     console.log(`📋 Network: ${config.hederaNetwork}`);
 
     // Run tests in sequence

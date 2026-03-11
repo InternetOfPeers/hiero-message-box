@@ -37,7 +37,7 @@ npm run listen-for-new-messages
 Users can also check for historical messages using this command:
 
 ```bash
-npm run check-messages -- [start-sequence] [end-sequence]
+npm run check-messages -- [start-sequence-number] [end-sequence-number]
 ```
 
 On first setup, the program generates/derives encryption keys, creates a Hedera topic as your message box, and updates your account memo with the topic ID in HIP-1334 format.
@@ -127,14 +127,14 @@ MIRROR_NODE_URL=https://mainnet.mirrornode.hedera.com/api/v1
 
 The Hiero Message Box supports two encryption methods:
 
-| Feature          | RSA (Default)              | ECIES                                              |
-| ---------------- | -------------------------- | -------------------------------------------------- |
-| Key Management   | Generate & store PEM files | Uses owner's key (`MESSAGE_BOX_OWNER_PRIVATE_KEY`) |
-| Key Type Support | All (ED25519, SECP256K1)   | SECP256K1 only                                     |
-| Public Key Size  | 294 bytes                  | 33-65 bytes                                        |
-| Setup Time       | ~50ms (key generation)     | <1ms (key derivation)                              |
-| Security         | RSA-2048 + AES-256-CBC     | ECDH + AES-256-GCM                                 |
-| Files to Backup  | `data/rsa_*.pem`           | None (uses .env)                                   |
+| Feature          | RSA (Default)              | ECIES                 |
+| ---------------- | -------------------------- | --------------------- |
+| Key Management   | Generate & store PEM files | Uses owner's key      |
+| Key Type Support | All (ED25519, SECP256K1)   | SECP256K1 only        |
+| Public Key Size  | 294 bytes                  | 33-65 bytes           |
+| Setup Time       | ~50ms (key generation)     | <1ms (key derivation) |
+| Security         | RSA-2048 + AES-256-CBC     | ECDH + AES-256-GCM    |
+| Files to Backup  | `data/rsa_*.pem`           | None (uses .env)      |
 
 **Use RSA if:**
 
@@ -212,19 +212,19 @@ Polls Mirror Node every 3 seconds, automatically detects and decrypts messages. 
 Retrieve and read messages from your message box in a specific range:
 
 ```bash
-npm run check-messages -- [start-sequence] [end-sequence]
+npm run check-messages -- [start-sequence-number] [end-sequence-number]
 ```
 
 **Examples:**
 
 ```bash
-# Get all messages from sequence 2 onwards (default)
+# Get all messages from sequence number 2 onwards (default, skip the public key message at sequence number 1)
 npm run check-messages
 
-# Get all messages from sequence 5 onwards
+# Get all messages from sequence number 5 onwards
 npm run check-messages -- 5
 
-# Get messages from sequence 5 to 10 (inclusive)
+# Get messages from sequence number 5 to 10 (inclusive)
 npm run check-messages -- 5 10
 ```
 
@@ -328,7 +328,7 @@ The codebase is organized into five modules:
    - Public key publishing with cryptographic signature proof
    - Signature verification before sending messages
    - Message encryption and sending (JSON/CBOR formats, auto-detecting encryption type)
-   - Real-time message polling with sequence tracking
+   - Real-time message polling with sequence number tracking
    - Automatic format and encryption type detection and decoding
    - Canonical JSON serialization for deterministic signatures
 
@@ -469,7 +469,7 @@ npm start                                           # Setup message box and star
 npm run setup-message-box                           # Setup/verify message box configuration
 npm run link-message-box -- <topic-id>              # Link an existing topic to the account's memo
 npm run listen-for-new-messages                     # Start polling for new messages
-npm run check-messages -- [start] [end]             # Read message history (defaults to all messages)
+npm run check-messages -- [start-sequence-number] [end-sequence-number] # Read message history (defaults to sequence number 2 onwards)
 npm run send-message -- <account id> <msg> [--cbor] # Send encrypted message to account
 npm run remove-message-box                          # Remove message box (clear account memo)
 npm run format                                      # Format code with Prettier
@@ -581,8 +581,6 @@ MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com/api/v1
 3. Old message box remains accessible with original keys
 
 **Note:** ECIES requires SECP256K1 key (not ED25519).
-
-## Additional Documentation
 
 ## References
 
