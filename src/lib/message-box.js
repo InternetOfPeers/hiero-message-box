@@ -22,8 +22,8 @@ const {
   verifySignature,
 } = require('./crypto');
 const { config } = require('./config');
-const { encodeCBOR } = require('./utils');
-const { formatMessage, parseMessageContent } = require('./format-message');
+const { encodeCBOR } = require('./format-message');
+const { formatMessage } = require('./format-message');
 
 // == Public functions ========================================================
 

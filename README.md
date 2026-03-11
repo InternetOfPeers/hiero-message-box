@@ -299,18 +299,14 @@ The codebase is organized into five modules:
    - Validates all required fields immediately, failing fast with clear error messages
    - The single place where `process.env` is read — no other module touches it
 
-2. **`lib/utils.js`**: General-purpose utilities
-   - Custom CBOR encoder/decoder implementation (RFC 8949 compliant)
-   - Supports strings, numbers, booleans, null, arrays, objects, and byte buffers
-
-3. **`lib/crypto.js`**: Cryptographic operations
+2. **`lib/crypto.js`**: Cryptographic operations
    - RSA hybrid encryption/decryption (AES-256-CBC + RSA-2048-OAEP)
    - ECIES encryption/decryption (ECDH + AES-256-GCM)
    - Encryption type detection and routing
    - Message signing and signature verification (ED25519, ECDSA_SECP256K1)
    - DER encoding helpers for public/private keys
 
-4. **`lib/hedera.js`**: Hedera blockchain operations
+3. **`lib/hedera.js`**: Hedera blockchain operations
    - Client initialization (testnet/mainnet)
    - Account memo read (via Mirror Node) and update (via Hedera SDK)
    - Account validation and public key retrieval using Mirror Node API
@@ -319,7 +315,7 @@ The codebase is organized into five modules:
    - Hedera key parsing and public key derivation (SECP256K1, ED25519)
    - Transaction execution and signing helpers
 
-5. **`lib/message-box.js`**: Core message box logic
+4. **`lib/message-box.js`**: Core message box logic
    - Two-key system support (payer and owner separation)
    - Message box setup with ownership signature generation
    - Message box linking (re-attach existing topic to account memo)
@@ -331,11 +327,12 @@ The codebase is organized into five modules:
    - Real-time message polling with sequence number tracking
    - Canonical JSON serialization for deterministic signatures
 
-6. **`lib/format-message.js`**: Message formatting and parsing
+5. **`lib/format-message.js`**: Message formatting, parsing, and CBOR
    - Decodes base64 HCS messages and detects encoding (JSON/CBOR/plain)
    - Formats encrypted messages with decryption (or a `(cannot decrypt)` notice)
    - Formats public key announcement messages
    - Formats plain-text messages
+   - Custom CBOR encoder/decoder (RFC 8949 compliant) — supports strings, numbers, booleans, null, arrays, objects, and byte buffers
    - Pure utility module with no Hedera client dependency (fully unit-testable)
 
 ### Mirror Node API
@@ -452,14 +449,14 @@ Messages are auto-detected (format: JSON/CBOR/plain, encryption: RSA/ECIES) and 
 │   └── lib/
 │       ├── config.js               # Config singleton (env loading, defaults, validation)
 │       ├── crypto.js               # Cryptographic operations (encryption, signing)
-│       ├── format-message.js       # Message formatting and parsing (pure, no I/O)
+│       ├── format-message.js       # Message formatting, parsing, and CBOR codec (pure, no I/O)
 │       ├── hedera.js               # Hedera SDK wrappers, client init, key parsing
-│       ├── message-box.js          # Core message box logic (setup, send, poll)
-│       └── utils.js                # General utilities (CBOR encoder/decoder)
+│       └── message-box.js          # Core message box logic (setup, send, poll)
 ├── test/
 │   ├── integration.test.js         # End-to-end integration test suite (requires .env)
-│   ├── unit.test.js                # Offline unit tests (no credentials required)
-│   └── README.md                   # Test documentation
+│   ├── setup.js                    # Jest setup — silences app console output during tests
+│   ├── streaming-reporter.js       # Custom Jest reporter with real-time per-test output
+│   └── unit.test.js                # Offline unit tests (no credentials required)
 ├── .env                            # Hedera credentials and config (not committed)
 ├── .env.example                    # Example environment file
 ├── .gitignore                      # Git ignore rules
@@ -484,6 +481,7 @@ npm run format                                      # Format code with Prettier
 npm test                                            # Run all tests (unit + integration)
 npm run test:unit                                   # Run offline unit tests only (no credentials needed)
 npm run test:integration                            # Run end-to-end integration tests only
+npm run test:coverage                               # Run all tests and generate a coverage report
 ```
 
 **Note:** Use `--` to separate npm options from script arguments when passing parameters.
@@ -528,7 +526,49 @@ Covers:
 - Link ownership validation (rejects attempts to link a topic to the wrong account)
 - Sending messages to a re-linked message box
 
-See [test/README.md](test/README.md) for detailed test documentation.
+### All Tests
+
+Run with:
+
+```bash
+npm test
+```
+
+Example output:
+
+```text
+  formatMessage
+    ✓ Encrypted message decrypted successfully (3 ms)
+    ✓ Encrypted message cannot be decrypted (60 ms)
+    ✓ Public key announcement message correctly decoded (17 ms)
+    ✓ Plain text / unrecognised message correctly handled (1 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        0.234 s
+
+  Message Box Integration
+    ✓ Setup Message Box (9757 ms)
+    ✓ Send Message (6520 ms)
+    ✓ Send Message (CBOR) (5816 ms)
+    ✓ Check Messages (187 ms)
+    ✓ Message Box Reuse (Idempotency) (95 ms)
+    ✓ Signature Verification (2532 ms)
+    ✓ Remove Message Box (5519 ms)
+    ✓ Link Message Box (re-attach existing topic) (6562 ms)
+    ✓ Link Message Box (idempotent – already linked) (132 ms)
+    ✓ Link Message Box (rejects wrong account) (122 ms)
+    ✓ Send Message After Re-link (4391 ms)
+    ✓ Remove Message Box (final cleanup) (6430 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       12 passed, 12 total
+Snapshots:   0 total
+Time:        48.353 s
+```
+
+Each test name appears immediately when it starts running (with a `●` indicator), and updates in-place with the result and elapsed time once it finishes. This is handled by [test/streaming-reporter.js](test/streaming-reporter.js).
 
 ## Configuration Files
 
