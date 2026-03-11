@@ -10,9 +10,10 @@
  */
 
 const { initializeClient } = require('../src/lib/hedera');
-const { loadEnvFile } = require('../src/lib/crypto');
+const { config } = require('../src/lib/config');
 const {
   setupMessageBox,
+  linkMessageBox,
   sendMessage,
   checkMessages,
   removeMessageBox,
@@ -47,7 +48,6 @@ async function testSetupMessageBox() {
 
     const result = await setupMessageBox(
       client,
-      process.env.RSA_DATA_DIR || './data',
       testAccountId,
       { skipPrompts: true }
     );
@@ -58,8 +58,7 @@ async function testSetupMessageBox() {
     messageBoxId = result.messageBoxId;
 
     // Wait for account memo to propagate to Mirror Node
-    console.log('   Waiting for consensus (5s)...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 4000));
 
     testPassed(testName);
   } catch (error) {
@@ -76,8 +75,8 @@ async function testSendMessage() {
 
     await sendMessage(client, testAccountId, testMessage, { useCBOR: false });
 
-    // Give time for consensus
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait for message to propagate to Mirror Node
+    await new Promise(resolve => setTimeout(resolve, 4000));
 
     testPassed(testName);
   } catch (error) {
@@ -94,8 +93,8 @@ async function testSendMessageCBOR() {
 
     await sendMessage(client, testAccountId, testMessage, { useCBOR: true });
 
-    // Give time for consensus
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait for message to propagate to Mirror Node
+    await new Promise(resolve => setTimeout(resolve, 4000));
 
     testPassed(testName);
   } catch (error) {
@@ -109,7 +108,6 @@ async function testCheckMessages() {
     console.log(`\n🧪 Testing: ${testName}`);
 
     const messages = await checkMessages(
-      process.env.RSA_DATA_DIR || './data',
       testAccountId,
       2, // Start from sequence 2 (skip public key message)
       undefined // Get all messages
@@ -144,7 +142,6 @@ async function testMessageBoxReuse() {
     // Setup again should recognize existing message box
     const result = await setupMessageBox(
       client,
-      process.env.RSA_DATA_DIR || './data',
       testAccountId,
       { skipPrompts: true }
     );
@@ -187,7 +184,100 @@ async function testRemoveMessageBox() {
 
     assert(result.success, 'Remove should succeed');
 
-    // Give time for consensus
+    // Wait for account memo to propagate to Mirror Node
+    await new Promise(resolve => setTimeout(resolve, 4000));
+
+    testPassed(testName);
+  } catch (error) {
+    testFailed(testName, error);
+  }
+}
+
+async function testLinkMessageBox() {
+  const testName = 'Link Message Box (re-attach existing topic)';
+  try {
+    console.log(`\n🧪 Testing: ${testName}`);
+
+    assert(messageBoxId, 'messageBoxId must be set from a previous setup test');
+
+    // The account memo was cleared by testRemoveMessageBox; link the existing topic back
+    const result = await linkMessageBox(client, testAccountId, messageBoxId);
+
+    assert(result.success, 'Link should succeed');
+    assert(
+      result.messageBoxId === messageBoxId,
+      'Should link to the provided topic ID'
+    );
+
+    // Wait for account memo to propagate to Mirror Node
+    await new Promise(resolve => setTimeout(resolve, 4000));
+
+    testPassed(testName);
+  } catch (error) {
+    testFailed(testName, error);
+  }
+}
+
+async function testLinkMessageBoxIdempotent() {
+  const testName = 'Link Message Box (idempotent – already linked)';
+  try {
+    console.log(`\n🧪 Testing: ${testName}`);
+
+    // Calling link again with the same topic ID should be a no-op (no new transaction)
+    const result = await linkMessageBox(client, testAccountId, messageBoxId);
+    assert(
+      result.messageBoxId === messageBoxId,
+      'Should return the same message box ID'
+    );
+    assert(
+      result.alreadyLinked === true,
+      'Should report alreadyLinked=true (no new transaction issued)'
+    );
+
+    testPassed(testName);
+  } catch (error) {
+    testFailed(testName, error);
+  }
+}
+
+async function testLinkMessageBoxWrongAccount() {
+  const testName = 'Link Message Box (rejects wrong account)';
+  try {
+    console.log(`\n🧪 Testing: ${testName}`);
+
+    // Attempt to link the topic to a different (non-existent) account ID
+    // The proof inside the topic references testAccountId, so linking to a
+    // different account should throw an error.
+    const fakeAccountId = '0.0.99999999';
+    let threw = false;
+    try {
+      await linkMessageBox(client, fakeAccountId, messageBoxId);
+    } catch (err) {
+      threw = true;
+      assert(
+        err.message.includes('configured for account') ||
+          err.message.includes('does not exist') ||
+          err.message.includes('inaccessible'),
+        `Expected account mismatch error, got: ${err.message}`
+      );
+    }
+    assert(threw, 'Should throw when linking to wrong account');
+
+    testPassed(testName);
+  } catch (error) {
+    testFailed(testName, error);
+  }
+}
+
+async function testSendMessageAfterRelink() {
+  const testName = 'Send Message After Re-link';
+  try {
+    console.log(`\n🧪 Testing: ${testName}`);
+
+    // Verify that the re-linked message box can still receive messages
+    const testMessage = `Re-link test message at ${Date.now()}`;
+    await sendMessage(client, testAccountId, testMessage);
+
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     testPassed(testName);
@@ -205,16 +295,10 @@ async function runTests() {
 
   try {
     // Initialize
-    loadEnvFile();
     client = initializeClient();
 
-    testAccountId = process.env.MESSAGE_BOX_OWNER_ACCOUNT_ID;
-    if (!testAccountId) {
-      throw new Error('MESSAGE_BOX_OWNER_ACCOUNT_ID not set in .env');
-    }
-
-    console.log(`\n📋 Test Account: ${testAccountId}`);
-    console.log(`📋 Network: ${process.env.HEDERA_NETWORK || 'testnet'}`);
+    console.log(`\n📋 Test Account: ${config.messageBoxOwnerAccountId}`);
+    console.log(`📋 Network: ${config.hederaNetwork}`);
 
     // Run tests in sequence
     await testSetupMessageBox();
@@ -223,6 +307,11 @@ async function runTests() {
     await testCheckMessages();
     await testMessageBoxReuse();
     await testSignatureVerification();
+    await testRemoveMessageBox();
+    await testLinkMessageBox();
+    await testLinkMessageBoxIdempotent();
+    await testLinkMessageBoxWrongAccount();
+    await testSendMessageAfterRelink();
     await testRemoveMessageBox();
 
     console.log('\n═══════════════════════════════════════════════════════');

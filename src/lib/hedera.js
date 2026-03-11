@@ -5,15 +5,15 @@ const {
   PrivateKey,
   AccountUpdateTransaction,
   TopicMessageSubmitTransaction,
-} = require('@hashgraph/sdk');
+} = require('@hiero-ledger/sdk');
 const https = require('https');
-const crypto = require('crypto');
+const { config } = require('./config');
 
 // == Private functions ========================================================
 
 /**
  * Checks if a transaction was successful.
- * @param {import("@hashgraph/sdk").TransactionReceipt} receipt - The transaction receipt.
+ * @param {import("@hiero-ledger/sdk").TransactionReceipt} receipt - The transaction receipt.
  * @returns {boolean} Whether the transaction was successful.
  */
 function isTransactionSuccessful(receipt) {
@@ -22,9 +22,9 @@ function isTransactionSuccessful(receipt) {
 
 /**
  * Helper to execute a transaction and get its receipt
- * @param {import("@hashgraph/sdk").Transaction} transaction - The transaction to execute
- * @param {import("@hashgraph/sdk").Client} client - The Hedera client
- * @returns {Promise<import("@hashgraph/sdk").TransactionReceipt>} The transaction receipt
+ * @param {import("@hiero-ledger/sdk").Transaction} transaction - The transaction to execute
+ * @param {import("@hiero-ledger/sdk").Client} client - The Hedera client
+ * @returns {Promise<import("@hiero-ledger/sdk").TransactionReceipt>} The transaction receipt
  */
 async function executeAndGetReceipt(transaction, client) {
   return transaction.execute(client).then(tx => tx.getReceipt(client));
@@ -32,8 +32,8 @@ async function executeAndGetReceipt(transaction, client) {
 
 /**
  * Helper to sign and freeze transaction with owner private key if provided
- * @param {import("@hashgraph/sdk").Transaction} transaction - The transaction to sign
- * @param {import("@hashgraph/sdk").Client} client - The Hedera client
+ * @param {import("@hiero-ledger/sdk").Transaction} transaction - The transaction to sign
+ * @param {import("@hiero-ledger/sdk").Client} client - The Hedera client
  * @param {string} ownerPrivateKeyDer - DER-encoded private key
  * @returns {Promise<void>}
  */
@@ -47,7 +47,7 @@ async function signWithOwnerKey(transaction, client, ownerPrivateKeyDer) {
 
 /**
  * Determine Hedera key type from SDK key object
- * @param {import("@hashgraph/sdk").PrivateKey} key - Hedera private key object
+ * @param {import("@hiero-ledger/sdk").PrivateKey} key - Hedera private key object
  * @returns {string} Key type: 'ED25519' or 'ECDSA_SECP256K1'
  */
 function getHederaKeyType(key) {
@@ -109,19 +109,13 @@ function derivePublicKeyFromHederaKey(derPrivateKey) {
 // Public functions
 
 /**
- * Initializes and returns a Hedera client based on environment variables.
- * @returns {import("@hashgraph/sdk").Client} The initialized Hedera client.
+ * Initializes and returns a Hedera client from the config singleton.
+ * @returns {import("@hiero-ledger/sdk").Client} The initialized Hedera client.
  */
 function initializeClient() {
-  const operatorId = process.env.PAYER_ACCOUNT_ID;
-  const operatorKey = process.env.PAYER_PRIVATE_KEY;
-  const network = process.env.HEDERA_NETWORK || 'testnet';
-
-  if (!operatorId || !operatorKey) {
-    throw new Error(
-      '✗ Please set PAYER_ACCOUNT_ID and PAYER_PRIVATE_KEY environment variables'
-    );
-  }
+  const operatorId = config.payerAccountId;
+  const operatorKey = config.payerPrivateKey;
+  const network = config.hederaNetwork;
 
   const client =
     network.toLowerCase() === 'mainnet'
@@ -136,19 +130,6 @@ function initializeClient() {
 }
 
 /**
- * Get Mirror Node URL from environment variable or default
- * @returns {string} The Mirror Node URL.
- */
-function getMirrorNodeUrl() {
-  const network = process.env.HEDERA_NETWORK || 'testnet';
-  const defaultUrl =
-    network.toLowerCase() === 'mainnet'
-      ? 'https://mainnet.mirrornode.hedera.com'
-      : 'https://testnet.mirrornode.hedera.com';
-  return process.env.MIRROR_NODE_URL || defaultUrl;
-}
-
-/**
  * Helper function to make HTTPS requests to the Mirror Node
  * @param {string} endpoint - The API endpoint path (e.g., '/accounts/0.0.123')
  * @param {Object} options - Request options
@@ -157,8 +138,7 @@ function getMirrorNodeUrl() {
  */
 async function mirrorNodeRequest(endpoint, options = {}) {
   const { resolveOnError = false } = options;
-  const mirrorNodeUrl = getMirrorNodeUrl();
-  const url = `${mirrorNodeUrl}${endpoint}`;
+  const url = `${config.mirrorNodeUrl}${endpoint}`;
 
   return new Promise((resolve, reject) => {
     https
@@ -226,7 +206,7 @@ async function isValidAccount(accountId) {
 
 /**
  * Updates the account memo.
- * @param {import("@hashgraph/sdk").Client} client - The Hedera client.
+ * @param {import("@hiero-ledger/sdk").Client} client - The Hedera client.
  * @param {string} accountId - The account ID to update
  * @param {string} memo - The memo text to set for the account.
  * @param {string} [ownerPrivateKeyDer] - Optional DER-encoded private key of the account owner (required if owner != payer)
@@ -258,7 +238,7 @@ async function updateAccountMemo(
 
 /**
  * Creates a new topic with a memo indicating the owner listens for messages there.
- * @param {import("@hashgraph/sdk").Client} client - The Hedera client.
+ * @param {import("@hiero-ledger/sdk").Client} client - The Hedera client.
  * @param {string} memo - The topic memo
  * @param {string} [ownerPrivateKeyDer] - Optional DER-encoded private key of the topic owner (required if owner != payer)
  * @returns {Promise<{success: boolean, topicId?: string, error?: string}>} The result of the topic creation.
@@ -290,7 +270,7 @@ async function createTopic(client, memo, ownerPrivateKeyDer = null) {
 
 /**
  * Send a message to a topic.
- * @param {import("@hashgraph/sdk").Client} client - The Hedera client
+ * @param {import("@hiero-ledger/sdk").Client} client - The Hedera client
  * @param {string} topicId - The topic ID
  * @param {string} message - The message to submit
  * @returns {Promise<{success: boolean, topicId?: string, error?: string}>} The result of the submission

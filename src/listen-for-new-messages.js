@@ -1,17 +1,13 @@
-const { loadEnvFile } = require('./lib/crypto');
+const { config } = require('./lib/config');
 const { pollMessages } = require('./lib/message-box');
 
 async function main() {
   try {
-    loadEnvFile();
-    const accountId = process.env.MESSAGE_BOX_OWNER_ACCOUNT_ID;
-    if (!accountId) {
-      throw new Error('MESSAGE_BOX_OWNER_ACCOUNT_ID is required.');
-    }
+    const accountId = config.messageBoxOwnerAccountId;
     console.log(`⚙ Listening for messages for account ${accountId}`);
     console.log('✓ Polling every 3 seconds. Press Ctrl+C to exit\n');
     while (true) {
-      const messages = await pollMessages(process.env.RSA_DATA_DIR, accountId);
+      const messages = await pollMessages(accountId);
       if (messages.length > 0) {
         console.log(`${messages.length} new message(s) received`);
         messages.forEach(message => console.log(`📥 ${message}`));

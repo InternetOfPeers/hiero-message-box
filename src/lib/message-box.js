@@ -18,20 +18,18 @@ const {
 const {
   encryptMessage,
   decryptMessage,
-  encodeCBOR,
-  decodeCBOR,
   signMessage,
   verifySignature,
 } = require('./crypto');
+const { config } = require('./config');
+const { encodeCBOR, decodeCBOR } = require('./utils');
 
 // == Public functions ========================================================
 
 // IMPORTANT: Two-Key System
 // -------------------------
-// 1. PAYER_PRIVATE_KEY (Operator/Payer): Pays for all Hedera transactions
+// 1. PAYER_PRIVATE_KEY (Operator/Payer): Pays for all Hedera transactions (third-party services to pay for transactions on behalf of users)
 // 2. MESSAGE_BOX_OWNER_PRIVATE_KEY (Owner): Signs the first message to prove message box ownership
-//    - If not set, defaults to PAYER_PRIVATE_KEY (operator owns the message box)
-//    - Allows third-party services to pay for transactions on behalf of users
 //
 // Verification flow:
 // - Owner signs the public key message with MESSAGE_BOX_OWNER_PRIVATE_KEY
@@ -42,20 +40,17 @@ const {
 /**
  * Sets up the message box for the account by creating a new topic and storing the public key.
  * The key pair is stored in the specified data directory. If the keys does not exist, they are generated.
- * @param {import("@hashgraph/sdk").Client} client
+ * @param {import("@hiero-ledger/sdk").Client} client
  * @param {string} accountId
  * @param {object} options - Optional configuration
  * @param {boolean} options.skipPrompts - If true, automatically create new message box when conflicts exist
  */
-async function setupMessageBox(client, dataDir, accountId, options = {}) {
+async function setupMessageBox(client, accountId, options = {}) {
   const { skipPrompts = false } = options;
-  let encryptionType = getEncryptionType();
-  const { publicKey, privateKey } = await loadOrGenerateKeyPair(
-    dataDir,
-    encryptionType
-  );
-  // Re-fetch encryption type in case it was changed during key loading (ED25519 -> RSA fallback)
-  encryptionType = getEncryptionType();
+  let encryptionType = config.encryptionType;
+  const { publicKey, privateKey } = await loadOrGenerateKeyPair(encryptionType);
+  // Re-read from config in case it was changed during key loading (ED25519 -> RSA fallback)
+  encryptionType = config.encryptionType;
 
   const ownerPrivateKey = getOwnerPrivateKey();
   const accountMemo = await getAccountMemo(accountId);
@@ -154,8 +149,67 @@ async function setupMessageBox(client, dataDir, accountId, options = {}) {
 }
 
 /**
+ * Links an existing message box (topic ID) to the account by updating the account memo.
+ * Validates that the topic exists, has a valid public key, and was set up for this account.
+ * Use this to re-attach an account memo to an existing topic without recreating the message box.
+ * @param {import("@hiero-ledger/sdk").Client} client
+ * @param {string} accountId
+ * @param {string} topicId - The existing topic ID to link
+ * @returns {Promise<{success: boolean, messageBoxId?: string, alreadyLinked: boolean}>}
+ */
+async function linkMessageBox(client, accountId, topicId) {
+  // Check if already linked (idempotent)
+  const currentMemo = await getAccountMemo(accountId);
+  console.debug(`✓ Current account memo: "${currentMemo}"`);
+  const currentBoxId = extractMessageBoxIdFromMemo(currentMemo);
+  if (currentBoxId === topicId) {
+    console.log(
+      `✓ Account ${accountId} is already linked to message box ${topicId}`
+    );
+    return { success: true, messageBoxId: topicId, alreadyLinked: true };
+  }
+
+  // Validate topic exists and has a valid public key
+  const status = await checkMessageBoxStatus(topicId);
+  if (!status.exists) {
+    throw new Error(`Topic ${topicId} does not exist or is inaccessible`);
+  }
+  if (!status.hasPublicKey) {
+    throw new Error(
+      `Topic ${topicId} exists but does not have a valid public key message`
+    );
+  }
+
+  // Verify that the topic was set up for this account
+  const firstMessage = await getFirstTopicMessage(topicId);
+  const content = Buffer.from(firstMessage.message, 'base64').toString('utf8');
+  const parsed = JSON.parse(content);
+  if (parsed.proof && parsed.proof.accountId !== accountId) {
+    throw new Error(
+      `Topic ${topicId} is configured for account ${parsed.proof.accountId}, not ${accountId}`
+    );
+  }
+
+  const ownerPrivateKey = getOwnerPrivateKey();
+  const result = await updateAccountMemo(
+    client,
+    accountId,
+    `[HIP-1334:${topicId}] If you want to contact me, send HIP-1334 encrypted messages to ${topicId}.`,
+    ownerPrivateKey
+  );
+  if (!result.success) {
+    throw new Error(`Failed to link message box: ${result.error}`);
+  }
+
+  console.log(
+    `✓ Account ${accountId} linked to existing message box ${topicId}`
+  );
+  return { success: true, messageBoxId: topicId, alreadyLinked: false };
+}
+
+/**
  * Removes the message box for the account by clearing the account memo.
- * @param {import("@hashgraph/sdk").Client} Hedera client
+ * @param {import("@hiero-ledger/sdk").Client} Hedera client
  * @param {string} accountId
  */
 async function removeMessageBox(client, accountId) {
@@ -184,7 +238,7 @@ async function removeMessageBox(client, accountId) {
 
 /**
  * Send an encrypted message to the recipient's message box.
- * @param {import("@hashgraph/sdk").Client} Hedera client
+ * @param {import("@hiero-ledger/sdk").Client} Hedera client
  * @param {string} recipientAccountId
  * @param {string} message
  * @param {Object} options - Optional parameters
@@ -328,14 +382,13 @@ async function sendMessage(client, recipientAccountId, message, options = {}) {
 
 /**
  * Poll for new messages in the message box.
- * @param {string} dataDir
  * @param {string} accountId
  * @returns {Promise<string[]>}
  */
-async function pollMessages(dataDir, accountId) {
+async function pollMessages(accountId) {
   if (pollingCache.firstCall) {
-    const encryptionType = getEncryptionType();
-    const { privateKey } = await loadOrGenerateKeyPair(dataDir, encryptionType);
+    const encryptionType = config.encryptionType;
+    const { privateKey } = await loadOrGenerateKeyPair(encryptionType);
     pollingCache.privateKey = privateKey;
     pollingCache.encryptionType = encryptionType;
 
@@ -369,15 +422,14 @@ async function pollMessages(dataDir, accountId) {
 
 /**
  * Check messages in a range for the account's message box.
- * @param {string} dataDir
  * @param {string} accountId
  * @param {number} startSequence - Starting sequence number (inclusive)
  * @param {number} [endSequence] - Ending sequence number (inclusive), if not provided gets all messages from start
  * @returns {Promise<string[]>}
  */
-async function checkMessages(dataDir, accountId, startSequence, endSequence) {
-  const encryptionType = getEncryptionType();
-  const { privateKey } = await loadOrGenerateKeyPair(dataDir, encryptionType);
+async function checkMessages(accountId, startSequence, endSequence) {
+  const encryptionType = config.encryptionType;
+  const { privateKey } = await loadOrGenerateKeyPair(encryptionType);
 
   const accountMemo = await getAccountMemo(accountId);
   console.debug(`✓ Current account memo: "${accountMemo}"`);
@@ -434,18 +486,12 @@ async function promptYesNo(question) {
 }
 
 /**
- * Get owner's private key from environment
+ * Get owner's private key from config singleton
  * @returns {string} MESSAGE_BOX_OWNER_PRIVATE_KEY
  * @throws {Error} If key is not set
  */
 function getOwnerPrivateKey() {
-  const key = process.env.MESSAGE_BOX_OWNER_PRIVATE_KEY;
-  if (!key) {
-    throw new Error(
-      'MESSAGE_BOX_OWNER_PRIVATE_KEY not found in environment variables'
-    );
-  }
-  return key;
+  return config.messageBoxOwnerPrivateKey;
 }
 
 /**
@@ -552,14 +598,6 @@ function formatMessage(msg, privateKey, encryptionType) {
   } else {
     return `[Seq: ${msg.sequence_number}] [${timestamp}] [${format.toUpperCase()}] Plain text message from ${sender}:\n${raw}`;
   }
-}
-
-/**
- * Get the encryption type from environment
- * @returns {string} 'RSA' or 'ECIES'
- */
-function getEncryptionType() {
-  return (process.env.ENCRYPTION_TYPE || 'RSA').toUpperCase();
 }
 
 /**
@@ -673,7 +711,7 @@ async function listenForMessages(
 /**
  * Publish public key to the message box topic with signature
  * The message box owner signs the public key with their Hedera account's private key
- * @param {import("@hashgraph/sdk").Client} client - Hedera client (operator pays for transaction)
+ * @param {import("@hiero-ledger/sdk").Client} client - Hedera client (operator pays for transaction)
  * @param {string} messageBoxId - Topic ID for the message box
  * @param {string|Object} publicKey - The encryption public key (RSA or ECIES)
  * @param {string} encryptionType - 'RSA' or 'ECIES'
@@ -764,12 +802,6 @@ async function checkMessageBoxStatus(messageBoxId) {
 }
 
 /**
- * Get public key from the first message in the topic using Mirror Node REST API
- * Returns the public key in the format expected by encryptMessage
- * @param {string} topicId
- * @returns {Promise<string|Object>} Public key (PEM string for RSA, object for ECIES)
- */
-/**
  * Extract raw public key bytes from DER-encoded format
  * @param {string} keyHex - Public key in hex format (might be DER or raw)
  * @param {string} keyType - Key type ('secp256k1' or 'ed25519')
@@ -848,15 +880,14 @@ async function verifyKeyPairMatchesTopic(
 
 /**
  * Loads existing key pair or generates a new one based on encryption type.
- * @param {string} dataDir - Directory to store keys
  * @param {string} encryptionType - 'RSA' or 'ECIES'
  * @returns {Promise<{ publicKey: string|Object, privateKey: string|Object }>} Key pair
  */
-async function loadOrGenerateKeyPair(dataDir, encryptionType) {
+async function loadOrGenerateKeyPair(encryptionType) {
   if (encryptionType === 'ECIES') {
     return await loadECIESKeyPair();
   } else {
-    return loadOrGenerateRSAKeyPair(dataDir);
+    return loadOrGenerateRSAKeyPair(config.rsaDataDir);
   }
 }
 
@@ -864,13 +895,11 @@ async function loadOrGenerateKeyPair(dataDir, encryptionType) {
  * Generate ECIES key pair from message box owner's Hedera private key
  * @returns {{ publicKey: Object, privateKey: Object }} ECIES key pair
  */
-function loadECIESKeyPair() {
-  console.debug(
-    '⚙ Deriving ECIES key pair from message box owner credentials'
-  );
+async function loadECIESKeyPair() {
+  console.debug('⚙ Deriving ECIES key pair from message box owner credentials');
 
   const ownerPrivateKey = getOwnerPrivateKey();
-  const { keyHex, keyType, keyBytes } = parseHederaPrivateKey(ownerPrivateKey);
+  const { keyHex, keyType } = parseHederaPrivateKey(ownerPrivateKey);
 
   // ECIES with native Node.js crypto only supports secp256k1
   // ED25519 cannot be used for ECDH (key exchange) - it's a signature scheme
@@ -883,42 +912,28 @@ function loadECIESKeyPair() {
       `ED25519 is a signature algorithm and cannot be used for ECDH key exchange.\n`
     );
 
-    const readline = require('readline').createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    return new Promise((resolve, reject) => {
-      readline.question(
-        '? Would you like to use RSA encryption instead? (yes/no): ',
-        ans => {
-          readline.close();
-          const answer = ans.toLowerCase().trim();
-          if (answer === 'yes' || answer === 'y') {
-            console.log('\n⚙ Switching to RSA encryption...');
-            // Switch to RSA mode
-            process.env.ENCRYPTION_TYPE = 'RSA';
-            const dataDir = process.env.RSA_DATA_DIR || './data';
-            const rsaKeyPair = loadOrGenerateRSAKeyPair(dataDir);
-            console.log(
-              '\n💡 Tip: To make this permanent, set ENCRYPTION_TYPE=RSA in your .env file'
-            );
-            resolve(rsaKeyPair);
-          } else {
-            console.log(
-              '\n⚙ Setup cancelled. Please either:\n' +
-                '  1. Set ENCRYPTION_TYPE=RSA in your .env file, or\n' +
-                '  2. Use a Hedera account with a SECP256K1 key'
-            );
-            reject(
-              new Error(
-                'ECIES encryption requires a SECP256K1 key. Setup cancelled by user.'
-              )
-            );
-          }
-        }
+    const answer = await promptYesNo(
+      '? Would you like to use RSA encryption instead? (yes/no): '
+    );
+    if (answer) {
+      console.log('\n⚙ Switching to RSA encryption...');
+      // Switch to RSA mode via config singleton (no process.env mutation)
+      config.encryptionType = 'RSA';
+      const rsaKeyPair = loadOrGenerateRSAKeyPair(config.rsaDataDir);
+      console.log(
+        '\n💡 Tip: To make this permanent, set ENCRYPTION_TYPE=RSA in your .env file'
       );
-    });
+      return rsaKeyPair;
+    } else {
+      console.log(
+        '\n⚙ Setup cancelled. Please either:\n' +
+          '  1. Set ENCRYPTION_TYPE=RSA in your .env file, or\n' +
+          '  2. Use a Hedera account with a SECP256K1 key'
+      );
+      throw new Error(
+        'ECIES encryption requires a SECP256K1 key. Setup cancelled by user.'
+      );
+    }
   }
 
   // Now derive the public key (safe because we verified it's SECP256K1)
@@ -1004,6 +1019,7 @@ function extractMessageBoxIdFromMemo(memo) {
 
 module.exports = {
   setupMessageBox,
+  linkMessageBox,
   removeMessageBox,
   sendMessage,
   pollMessages,

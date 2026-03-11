@@ -1,16 +1,12 @@
 const { initializeClient } = require('./lib/hedera');
-const { loadEnvFile } = require('./lib/crypto');
+const { config } = require('./lib/config');
 const { removeMessageBox } = require('./lib/message-box');
 
 let client = null;
 
 async function main() {
   try {
-    loadEnvFile();
-    const accountId = process.env.MESSAGE_BOX_OWNER_ACCOUNT_ID;
-    if (!accountId) {
-      throw new Error('MESSAGE_BOX_OWNER_ACCOUNT_ID is required.');
-    }
+    const accountId = config.messageBoxOwnerAccountId;
     client = initializeClient();
     console.log(`⚙ Removing message box for account ${accountId}`);
     await removeMessageBox(client, accountId);

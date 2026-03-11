@@ -1,14 +1,8 @@
-const { loadEnvFile } = require('./lib/crypto');
+const { config } = require('./lib/config');
 const { checkMessages } = require('./lib/message-box');
 
 async function main() {
   try {
-    loadEnvFile();
-    const accountId = process.env.MESSAGE_BOX_OWNER_ACCOUNT_ID;
-    if (!accountId) {
-      throw new Error('MESSAGE_BOX_OWNER_ACCOUNT_ID is required.');
-    }
-
     const args = process.argv.slice(2);
     const startSequence = args[0] ? parseInt(args[0]) : 2;
     const endSequence = args[1] ? parseInt(args[1]) : undefined;
@@ -41,10 +35,10 @@ async function main() {
       process.exit(1);
     }
 
+    const accountId = config.messageBoxOwnerAccountId;
     console.log(`⚙ Checking messages for account ${accountId}`);
 
     const messages = await checkMessages(
-      process.env.RSA_DATA_DIR,
       accountId,
       startSequence,
       endSequence

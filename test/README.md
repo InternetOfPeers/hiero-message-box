@@ -13,16 +13,24 @@ The test suite validates all main flows of the message box system:
 5. **Message Box Reuse** - Idempotency of setup operations
 6. **Signature Verification** - Ownership proof validation
 7. **Remove Message Box** - Cleaning up message box references
+8. **Link Message Box** - Re-attaching an existing topic to an account memo
+9. **Link Message Box (Idempotent)** - Re-linking an already-linked topic is a no-op
+10. **Link Message Box (Wrong Account)** - Rejects linking a topic to the wrong account
+11. **Send Message After Re-link** - Verifying the re-linked box can receive messages
+12. **Remove Message Box** (final cleanup)
 
 ## Prerequisites
 
 Before running tests, ensure:
 
 - `.env` file is properly configured with test account credentials:
-  - `PAYER_PRIVATE_KEY` - Account that pays transaction fees
-  - `MESSAGE_BOX_OWNER_PRIVATE_KEY` - Account that owns the message box
+  - `PAYER_ACCOUNT_ID` - Account that pays transaction fees
+  - `PAYER_PRIVATE_KEY` - Private key for the payer account
   - `MESSAGE_BOX_OWNER_ACCOUNT_ID` - Account ID for the message box owner
-  - `HEDERA_NETWORK` - Network to use (testnet/mainnet)
+  - `MESSAGE_BOX_OWNER_PRIVATE_KEY` - Private key for the message box owner
+
+  All four credentials are **required**. The config module validates them at startup
+  and fails immediately with a clear error if any are missing.
 
 - Test account has sufficient HBAR balance for:
   - Topic creation (~$1 USD)
@@ -93,6 +101,16 @@ Tests cleanup operations:
 
 - Account memo clearing
 - Transaction signing
+
+### Link Message Box
+
+Tests re-attaching an existing topic:
+
+- Topic existence and public key validation
+- Account ownership verification (rejects wrong account)
+- Account memo update
+- Idempotency (`alreadyLinked: true` when memo already matches, no new transaction)
+- Receiving messages on a re-linked box
 
 ## Test Output
 
@@ -177,9 +195,9 @@ If tests fail, check:
 
 ### Common Issues
 
-#### "MESSAGE_BOX_OWNER_ACCOUNT_ID not set"
+#### "Missing credentials"
 
-- Add the variable to your `.env` file
+- Add the missing variable(s) to your `.env` file. The config module reports exactly which variable is absent.
 
 #### "Insufficient balance"
 

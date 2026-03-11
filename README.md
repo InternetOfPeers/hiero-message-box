@@ -22,6 +22,12 @@ Users can create the message box with this command:
 npm run setup-message-box
 ```
 
+Users can link an existing message box to their account using its topic ID with this command:
+
+```bash
+npm run link-message-box -- <topic-id>
+```
+
 Users can listen for new messages in real-time using this command:
 
 ```bash
@@ -48,8 +54,8 @@ On first setup, the program generates/derives encryption keys, creates a Hedera 
   - Prevents sending to compromised or fraudulent message boxes
 - **Dual Encryption Support**: Choose between RSA-2048 or ECIES (Elliptic Curve Integrated Encryption Scheme)
   - **RSA Mode**: Traditional RSA-2048 keys stored in `data/` folder (works with all key types)
-  - **ECIES Mode**: Uses your Hedera operator's SECP256K1 key (no separate key files needed)
-- **Automatic Key Management**: RSA keys are auto-generated, ECIES keys are derived from your operator credentials
+  - **ECIES Mode**: Uses your message box owner's SECP256K1 key (no separate key files needed)
+- **Automatic Key Management**: RSA keys are auto-generated, ECIES keys are derived from your owner credentials (`MESSAGE_BOX_OWNER_PRIVATE_KEY`)
 - **Hedera Topics**: Creates and manages Hedera topics for message distribution
 - **Key Verification**: Automatically verifies local keys match the topic's public key
 - **Mirror Node API**: Uses Hedera Mirror Node for all read operations (account validation, memo retrieval, message polling, topic verification)
@@ -57,7 +63,7 @@ On first setup, the program generates/derives encryption keys, creates a Hedera 
 - **Message Formats**: Supports both JSON and CBOR encoding formats for flexibility
 - **Chunked Messages**: Automatically handles messages larger than 1KB split across multiple chunks by HCS
 - **Modular Architecture**: Common functions extracted for reusability and maintainability
-- **Minimal External Dependencies**: Uses only Hashgraph SDK v2.76.0 and native Node.js crypto module
+- **Minimal External Dependencies**: Uses only `@hiero-ledger/sdk` and native Node.js crypto module
 
 ## Prerequisites
 
@@ -85,20 +91,18 @@ On first setup, the program generates/derives encryption keys, creates a Hedera 
 
 ```text
 # Two-Key System Configuration
-# PAYER_PRIVATE_KEY: Account that pays for all Hedera transactions
+# PAYER_PRIVATE_KEY: Account that pays for all Hedera transactions (third-party services can pay for transactions on behalf of users)
 PAYER_ACCOUNT_ID=0.0.xxxxx
 PAYER_PRIVATE_KEY=302e020100300506032b657004220420...
 
 # MESSAGE_BOX_OWNER_PRIVATE_KEY: Account that owns and signs the message box
-# - If not set, defaults to PAYER_PRIVATE_KEY (operator owns the message box)
-# - Allows third-party services to pay for transactions on behalf of users
 MESSAGE_BOX_OWNER_ACCOUNT_ID=0.0.xxxxx
 MESSAGE_BOX_OWNER_PRIVATE_KEY=302e020100300506032b657004220420...
 
 # Encryption Configuration (optional - defaults to RSA)
 # Options: RSA, ECIES
 # RSA: Uses RSA-2048 keys (generated and stored in data/ folder)
-# ECIES: Uses operator's SECP256K1 key for encryption (derived from MESSAGE_BOX_OWNER_PRIVATE_KEY)
+# ECIES: Uses owner's SECP256K1 key for encryption (derived from MESSAGE_BOX_OWNER_PRIVATE_KEY)
 #        Note: ECIES requires SECP256K1 - ED25519 keys are not supported
 ENCRYPTION_TYPE=RSA
 
@@ -107,14 +111,14 @@ RSA_DATA_DIR=./data
 
 # Network Configuration (optional - defaults to testnet)
 HEDERA_NETWORK=testnet
-MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
+MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com/api/v1
 ```
 
 For **mainnet**, change to:
 
 ```text
 HEDERA_NETWORK=mainnet
-MIRROR_NODE_URL=https://mainnet.mirrornode.hedera.com
+MIRROR_NODE_URL=https://mainnet.mirrornode.hedera.com/api/v1
 ```
 
 ## Usage
@@ -123,20 +127,20 @@ MIRROR_NODE_URL=https://mainnet.mirrornode.hedera.com
 
 The Hiero Message Box supports two encryption methods:
 
-| Feature          | RSA (Default)              | ECIES                  |
-| ---------------- | -------------------------- | ---------------------- |
-| Key Management   | Generate & store PEM files | Uses your operator key |
-| Key Type Support | All (ED25519, SECP256K1)   | SECP256K1 only         |
-| Public Key Size  | 294 bytes                  | 33-65 bytes            |
-| Setup Time       | ~50ms (key generation)     | <1ms (key derivation)  |
-| Security         | RSA-2048 + AES-256-CBC     | ECDH + AES-256-GCM     |
-| Files to Backup  | `data/rsa_*.pem`           | None (uses .env)       |
+| Feature          | RSA (Default)              | ECIES                                              |
+| ---------------- | -------------------------- | -------------------------------------------------- |
+| Key Management   | Generate & store PEM files | Uses owner's key (`MESSAGE_BOX_OWNER_PRIVATE_KEY`) |
+| Key Type Support | All (ED25519, SECP256K1)   | SECP256K1 only                                     |
+| Public Key Size  | 294 bytes                  | 33-65 bytes                                        |
+| Setup Time       | ~50ms (key generation)     | <1ms (key derivation)                              |
+| Security         | RSA-2048 + AES-256-CBC     | ECDH + AES-256-GCM                                 |
+| Files to Backup  | `data/rsa_*.pem`           | None (uses .env)                                   |
 
 **Use RSA if:**
 
 - You already have a message box and want to keep it
 - Your Hedera account uses ED25519 keys
-- You prefer separate encryption keys from your operator key
+- You prefer separate encryption keys from your Hedera account signing keys
 
 **Use ECIES if:**
 
@@ -160,11 +164,34 @@ npm run setup-message-box
 
 The setup process:
 
-1. Loads/generates encryption keys (RSA: `data/*.pem`, ECIES: derived from `HEDERA_PRIVATE_KEY`)
+1. Loads/generates encryption keys (RSA: `data/*.pem`, ECIES: derived from `MESSAGE_BOX_OWNER_PRIVATE_KEY`)
 2. Checks existing message box in account memo
 3. Verifies keys can decrypt messages
 4. Creates new topic if needed, publishes public key
 5. Updates account memo with topic ID: `[HIP-1334:0.0.xxxxx]`
+
+### Link Message Box
+
+Link an existing message box (Hedera topic) to your account without recreating it:
+
+```bash
+npm run link-message-box -- <topic-id>
+```
+
+**Example:**
+
+```bash
+npm run link-message-box -- 0.0.1234
+```
+
+Useful when your account memo was cleared (e.g. after `remove-message-box`) but the topic and its keys still exist. The command:
+
+1. Verifies the topic exists and has a valid public key message
+2. Confirms the topic was originally set up for your account (ownership check)
+3. Updates the account memo to reference the topic ID in `[HIP-1334:0.0.xxxxx]` format
+4. Is idempotent — re-running with the same topic ID is safe and does nothing if already linked
+
+**Note:** Since the account memo update requires the owner's signature, you must configure `MESSAGE_BOX_OWNER_PRIVATE_KEY` with the same key that was used when the message box was created. In addition, to be able to read messages, in case you used RSA, the corresponding `rsa_private.pem` private key file should also be present in the `RSA_DATA_DIR` folder.
 
 ### Listen for New Messages
 
@@ -198,7 +225,7 @@ npm run check-messages
 npm run check-messages -- 5
 
 # Get messages from sequence 5 to 10 (inclusive)
-npm run check-messages 5 10
+npm run check-messages -- 5 10
 ```
 
 Retrieves and decrypts messages in the specified range with timestamps and sequence numbers.
@@ -258,38 +285,46 @@ Hybrid encryption: AES-256-CBC for messages + RSA-2048-OAEP for key exchange. Su
 
 ### ECIES Mode
 
-Uses ECDH (secp256k1) + AES-256-GCM. Provides smaller public keys (33 bytes vs 294), and derives keys from your operator credentials. **Requires SECP256K1** (ED25519 not supported).
+Uses ECDH (secp256k1) + AES-256-GCM. Provides smaller public keys (33 bytes vs 294), and derives keys from the owner credentials (`MESSAGE_BOX_OWNER_PRIVATE_KEY`). **Requires SECP256K1** (ED25519 not supported).
 
 ## Architecture
 
 ### Modular Design
 
-The codebase is organized into three main modules:
+The codebase is organized into five modules:
 
-1. **`lib/crypto.js`**: Cryptographic operations
-   - Environment variable loading from `.env` file
+1. **`lib/config.js`**: Application configuration singleton
+   - Loads `.env` file at module-load time (no explicit call needed)
+   - Builds and exports the `config` object with all settings and defaults
+   - Validates all required fields immediately, failing fast with clear error messages
+   - The single place where `process.env` is read — no other module touches it
+
+2. **`lib/utils.js`**: General-purpose utilities
+   - Custom CBOR encoder/decoder implementation (RFC 8949 compliant)
+   - Supports strings, numbers, booleans, null, arrays, objects, and byte buffers
+
+3. **`lib/crypto.js`**: Cryptographic operations
    - RSA hybrid encryption/decryption (AES-256-CBC + RSA-2048-OAEP)
    - ECIES encryption/decryption (ECDH + AES-256-GCM)
    - Encryption type detection and routing
-   - Custom CBOR encoder/decoder implementation (RFC 8949 compliant)
    - Message signing and signature verification (ED25519, ECDSA_SECP256K1)
    - DER encoding helpers for public/private keys
 
-2. **`lib/hedera.js`**: Hedera blockchain operations
+4. **`lib/hedera.js`**: Hedera blockchain operations
    - Client initialization (testnet/mainnet)
    - Account memo read (via Mirror Node) and update (via Hedera SDK)
    - Account validation and public key retrieval using Mirror Node API
    - Topic creation and message submission
-   - Mirror Node URL configuration
    - Topic message queries with pagination support
    - Hedera key parsing and public key derivation (SECP256K1, ED25519)
    - Transaction execution and signing helpers
 
-3. **`lib/message-box.js`**: Core message box logic
+5. **`lib/message-box.js`**: Core message box logic
    - Two-key system support (payer and owner separation)
    - Message box setup with ownership signature generation
+   - Message box linking (re-attach existing topic to account memo)
    - RSA key pair generation and management
-   - ECIES key derivation from operator credentials
+   - ECIES key derivation from the owner credentials (`MESSAGE_BOX_OWNER_PRIVATE_KEY`)
    - Public key publishing with cryptographic signature proof
    - Signature verification before sending messages
    - Message encryption and sending (JSON/CBOR formats, auto-detecting encryption type)
@@ -396,24 +431,35 @@ Messages are auto-detected (format: JSON/CBOR/plain, encryption: RSA/ECIES) and 
 
 ```text
 ./
-├── src/
-│   ├── setup-message-box.js        # Setup message box for account
-│   ├── check-messages.js           # Check existing messages inside the message box
-│   ├── listen-for-new-messages.js  # Listener/Receiver application
-│   ├── send-message.js             # Sender application
-│   ├── remove-message-box.js       # Remove message box configuration
-│   └── lib/
-│       ├── common.js               # Common utilities (encryption, env loading, CBOR)
-│       ├── hedera.js               # Hedera SDK wrappers, client init, key parsing
-│       └── message-box.js          # Core message box logic (setup, send, poll)
 ├── data/
 │   ├── rsa_private.pem             # RSA private key (auto-generated, RSA mode only)
 │   └── rsa_public.pem              # RSA public key (auto-generated, RSA mode only)
-├── docs/                           # Documentation and presentations
-├── package.json                    # Dependencies and scripts
+├── docs/
+│   └── presentation.html           # Interactive presentation of the message box flow
+├── src/
+│   ├── check-messages.js           # Check existing messages inside the message box
+│   ├── link-message-box.js         # Link an existing topic to the account
+│   ├── listen-for-new-messages.js  # Listener/Receiver application
+│   ├── remove-message-box.js       # Remove message box configuration
+│   ├── send-message.js             # Sender application
+│   ├── setup-message-box.js        # Setup message box for account
+│   └── lib/
+│       ├── config.js               # Config singleton (env loading, defaults, validation)
+│       ├── crypto.js               # Cryptographic operations (encryption, signing)
+│       ├── hedera.js               # Hedera SDK wrappers, client init, key parsing
+│       ├── message-box.js          # Core message box logic (setup, send, poll)
+│       └── utils.js                # General utilities (CBOR encoder/decoder)
+├── test/
+│   ├── integration.test.js         # Integration test suite
+│   └── README.md                   # Test documentation
 ├── .env                            # Hedera credentials and config (not committed)
 ├── .env.example                    # Example environment file
-└── .gitignore                      # Git ignore rules
+├── .gitignore                      # Git ignore rules
+├── .prettierignore                 # Prettier ignore rules
+├── .prettierrc.json                # Prettier configuration
+├── LICENSE                         # MIT license
+├── package-lock.json               # Locked dependency versions
+└── package.json                    # Dependencies and scripts
 ```
 
 ## Available NPM Scripts
@@ -421,6 +467,7 @@ Messages are auto-detected (format: JSON/CBOR/plain, encryption: RSA/ECIES) and 
 ```bash
 npm start                                           # Setup message box and start listening for new messages
 npm run setup-message-box                           # Setup/verify message box configuration
+npm run link-message-box -- <topic-id>              # Link an existing topic to the account's memo
 npm run listen-for-new-messages                     # Start polling for new messages
 npm run check-messages -- [start] [end]             # Read message history (defaults to all messages)
 npm run send-message -- <account id> <msg> [--cbor] # Send encrypted message to account
@@ -447,6 +494,10 @@ The test suite covers:
 - Message box reuse (idempotency)
 - Signature verification
 - Message box removal
+- Linking an existing topic back to an account after removal
+- Link idempotency (re-linking an already-linked topic is a no-op)
+- Link ownership validation (rejects attempts to link a topic to the wrong account)
+- Sending messages to a re-linked message box
 
 See [test/README.md](test/README.md) for detailed test documentation.
 
@@ -464,20 +515,20 @@ PAYER_PRIVATE_KEY=302e020100300506032b657004220420...
 # Message box owner
 MESSAGE_BOX_OWNER_ACCOUNT_ID=0.0.xxxxx
 MESSAGE_BOX_OWNER_PRIVATE_KEY=302e020100300506032b657004220420...
-
-# Data directory for RSA keys
-RSA_DATA_DIR=./data
 ```
 
 Optional variables:
 
 ```text
-# Encryption type (defaults to RSA)
-ENCRYPTION_TYPE=RSA  # or ECIES
+# Data directory for RSA keys
+RSA_DATA_DIR=./data
+
+# Encryption type, ECIES or RSA
+ENCRYPTION_TYPE=RSA
 
 # Network (defaults to testnet)
 HEDERA_NETWORK=testnet
-MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
+MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com/api/v1
 ```
 
 ### Encryption Keys
@@ -490,7 +541,7 @@ MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
 **ECIES Mode:**
 
 - No separate key files needed
-- Keys are derived from `HEDERA_PRIVATE_KEY` in `.env`
+- Keys are derived from `MESSAGE_BOX_OWNER_PRIVATE_KEY` in `.env`
 - Requires SECP256K1 key type
 
 ## Security Notes
@@ -501,7 +552,7 @@ MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
   - `MESSAGE_BOX_OWNER_PRIVATE_KEY`: Proves ownership via signatures
   - Enables third-party payment while maintaining user control
 - RSA mode: private key in `data/rsa_private.pem` for local decryption only
-- ECIES mode: operator key in `.env` used for transactions and decryption
+- ECIES mode: owner key (`MESSAGE_BOX_OWNER_PRIVATE_KEY`) in `.env` used for encryption/decryption
 - **Signature verification**: Message box ownership uses cryptographic signatures with canonical JSON serialization
   - First message signed with owner's Hedera private key
   - Senders verify signature against account's public key from Mirror Node

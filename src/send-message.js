@@ -1,12 +1,10 @@
 const { initializeClient } = require('./lib/hedera');
-const { loadEnvFile } = require('./lib/crypto');
 const { sendMessage } = require('./lib/message-box');
 
 let client = null;
 
 async function main() {
   try {
-    loadEnvFile();
     client = initializeClient();
 
     const args = process.argv.slice(2);
