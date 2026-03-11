@@ -453,10 +453,12 @@ Messages are auto-detected (format: JSON/CBOR/plain, encryption: RSA/ECIES) and 
 │       ├── hedera.js               # Hedera SDK wrappers, client init, key parsing
 │       └── message-box.js          # Core message box logic (setup, send, poll)
 ├── test/
+│   ├── config.test.js              # Unit tests for config.js (env loading, defaults, validation)
+│   ├── format-message.test.js      # Unit tests for format-message.js (CBOR codec, parsing)
 │   ├── integration.test.js         # End-to-end integration test suite (requires .env)
 │   ├── setup.js                    # Jest setup — silences app console output during tests
 │   ├── streaming-reporter.js       # Custom Jest reporter with real-time per-test output
-│   └── unit.test.js                # Offline unit tests (no credentials required)
+│   └── unit.test.js                # formatMessage unit tests (no credentials required)
 ├── .env                            # Hedera credentials and config (not committed)
 ├── .env.example                    # Example environment file
 ├── .gitignore                      # Git ignore rules
@@ -488,7 +490,17 @@ npm run test:coverage                               # Run all tests and generate
 
 ## Testing
 
-The project uses [Jest](https://jestjs.io/) as its test runner. There are two test suites:
+The project uses [Jest](https://jestjs.io/) as its test runner. Tests are split into offline unit tests and live integration tests:
+
+### All Tests
+
+Run with:
+
+```bash
+npm test
+```
+
+Each test name appears immediately when it starts running (with a `●` indicator), and updates in-place with the result and elapsed time once it finishes. This is handled by [test/streaming-reporter.js](test/streaming-reporter.js).
 
 ### Unit Tests (offline)
 
@@ -498,12 +510,28 @@ Test pure logic with no network connection or credentials required:
 npm run test:unit
 ```
 
-Covers all four exit paths of `formatMessage` in `src/lib/format-message.js`:
+Spans three test files (`unit.test.js`, `config.test.js`, `format-message.test.js`) and covers:
+
+**`unit.test.js`** — four exit paths of `formatMessage`:
 
 - Encrypted message that decrypts successfully
 - Encrypted message that cannot be decrypted (wrong key)
 - Public key announcement message
 - Plain-text / unrecognised content
+
+**`config.test.js`** — config singleton (`src/lib/config.js`):
+
+- `.env` file loading: absent file, read errors, env-var precedence, quote stripping, comment/blank-line handling
+- `findProjectRoot()` fallback behaviour
+- Default values and case normalisations (network, encryption type, RSA data dir, mirror node URL)
+- Required-field validation (throws with a clear message for each missing field)
+
+**`format-message.test.js`** — CBOR codec and message formatting (`src/lib/format-message.js`):
+
+- `encodeCBOR`/`decodeCBOR` roundtrip for all supported types (primitives, integers, floats, strings, buffers, arrays, objects)
+- `encodeCBOR` and `decodeCBOR` error cases (unsupported types, malformed input)
+- `parseMessageContent` format detection (CBOR, JSON, plain)
+- `formatMessage` with CBOR-encoded messages and public-key output branches
 
 ### Integration Tests (live Hedera)
 
@@ -525,50 +553,6 @@ Covers:
 - Link idempotency (re-linking an already-linked topic is a no-op)
 - Link ownership validation (rejects attempts to link a topic to the wrong account)
 - Sending messages to a re-linked message box
-
-### All Tests
-
-Run with:
-
-```bash
-npm test
-```
-
-Example output:
-
-```text
-  formatMessage
-    ✓ Encrypted message decrypted successfully (3 ms)
-    ✓ Encrypted message cannot be decrypted (60 ms)
-    ✓ Public key announcement message correctly decoded (17 ms)
-    ✓ Plain text / unrecognised message correctly handled (1 ms)
-
-Test Suites: 1 passed, 1 total
-Tests:       4 passed, 4 total
-Snapshots:   0 total
-Time:        0.234 s
-
-  Message Box Integration
-    ✓ Setup Message Box (9757 ms)
-    ✓ Send Message (6520 ms)
-    ✓ Send Message (CBOR) (5816 ms)
-    ✓ Check Messages (187 ms)
-    ✓ Message Box Reuse (Idempotency) (95 ms)
-    ✓ Signature Verification (2532 ms)
-    ✓ Remove Message Box (5519 ms)
-    ✓ Link Message Box (re-attach existing topic) (6562 ms)
-    ✓ Link Message Box (idempotent – already linked) (132 ms)
-    ✓ Link Message Box (rejects wrong account) (122 ms)
-    ✓ Send Message After Re-link (4391 ms)
-    ✓ Remove Message Box (final cleanup) (6430 ms)
-
-Test Suites: 1 passed, 1 total
-Tests:       12 passed, 12 total
-Snapshots:   0 total
-Time:        48.353 s
-```
-
-Each test name appears immediately when it starts running (with a `●` indicator), and updates in-place with the result and elapsed time once it finishes. This is handled by [test/streaming-reporter.js](test/streaming-reporter.js).
 
 ## Configuration Files
 
