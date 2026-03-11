@@ -17,28 +17,41 @@ const chalk = require('chalk');
 
 class StreamingReporter {
   constructor() {
-    this._currentDescribe = null;
+    // Tracks the last-printed describe header per test file path, so each
+    // suite has its own state and they don't clobber each other.
+    this._currentDescribe = new Map();
+
+    // Number of test files currently running in parallel.  When >1, the
+    // \r-overwrite trick is unsafe because output from different suites
+    // interleaves on the same terminal line.
+    this._activeFiles = 0;
   }
 
   // Called once before any test file starts.  Suppress the default
   // "Determining test suites to run…" message.
   onRunStart() {}
 
-  // Suppress the "RUNS test/file.js" status line — per-test output makes it
-  // redundant.
-  onTestStart() {}
+  // Track how many files are running; suppress the "RUNS …" status line.
+  onTestStart() {
+    this._activeFiles++;
+  }
 
   // Called immediately when a test case starts.
-  onTestCaseStart(_test, { ancestorTitles, title }) {
+  onTestCaseStart(test, { ancestorTitles, title }) {
+    const filePath = test.path;
     const describe = ancestorTitles.join(' > ');
 
-    if (describe !== this._currentDescribe) {
-      this._currentDescribe = describe;
+    if (this._currentDescribe.get(filePath) !== describe) {
+      this._currentDescribe.set(filePath, describe);
       process.stdout.write(`\n  ${chalk.bold(describe)}\n`);
     }
 
-    // No newline — onTestCaseResult will overwrite this line via \r.
-    process.stdout.write(`    ${chalk.cyan('●')} ${title}`);
+    // Only write a partial line (no newline) when running sequentially.
+    // In parallel runs we skip this to avoid interleaved partial lines —
+    // onTestCaseResult will print the full row instead.
+    if (this._activeFiles <= 1) {
+      process.stdout.write(`    ${chalk.cyan('●')} ${title}`);
+    }
   }
 
   // Called immediately when a test case finishes.
@@ -48,12 +61,20 @@ class StreamingReporter {
                : status === 'failed' ? chalk.red('✗')
                : chalk.yellow('○');
 
-    process.stdout.write(`\r    ${icon} ${title}${ms}\n`);
+    if (this._activeFiles <= 1) {
+      // Overwrite the "● title" placeholder written by onTestCaseStart.
+      process.stdout.write(`\r    ${icon} ${title}${ms}\n`);
+    } else {
+      // No placeholder was written — just print the result directly.
+      process.stdout.write(`    ${icon} ${title}${ms}\n`);
+    }
   }
 
-  // Called once per test file after all its tests finish.  Only used to
-  // surface failure details (error messages + stack traces).
-  onTestResult(_test, { testResults, numFailingTests }) {
+  // Called once per test file after all its tests finish.
+  onTestResult(test, { testResults, numFailingTests }) {
+    this._activeFiles--;
+    this._currentDescribe.delete(test.path);
+
     if (numFailingTests === 0) return;
 
     for (const t of testResults) {
@@ -61,7 +82,6 @@ class StreamingReporter {
       const name = [...t.ancestorTitles, t.title].join(' › ');
       process.stdout.write(`\n  ${chalk.red('● ')}${name}\n\n`);
       for (const msg of t.failureMessages) {
-        // Indent every line of the (already ANSI-formatted) message.
         const indented = msg.split('\n').map(l => `    ${l}`).join('\n');
         process.stdout.write(`${indented}\n`);
       }

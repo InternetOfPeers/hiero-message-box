@@ -16,13 +16,14 @@
     "remove-message-box": "node src/remove-message-box.js",
     "format": "prettier --write \"src/**/*.js\"",
     "test:coverage": "jest --coverage",
-    "test:unit": "jest test/unit.test.js --detectOpenHandles",
-    "test:integration": "jest test/integration.test.js --runInBand --detectOpenHandles",
-    "test": "jest test/unit.test.js --detectOpenHandles && jest test/integration.test.js --runInBand --detectOpenHandles"
+    "test:unit": "jest test/unit.test.js test/config.test.js test/format-message.test.js",
+    "test:integration": "jest test/integration.test.js --runInBand",
+    "test": "jest test/unit.test.js test/config.test.js test/format-message.test.js && jest test/integration.test.js --runInBand"
   },
   "jest": {
     "testEnvironment": "node",
     "testTimeout": 120000,
+    "detectOpenHandles": true,
     "testMatch": [
       "**/test/**/*.test.js"
     ],
