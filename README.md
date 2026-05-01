@@ -2,7 +2,7 @@
 
 Hiero Message Box is a simple way for users to set up a message box and receive private messages, for example getting alerts about security communications about their assets or wallet, etc.
 
-This implementation follows the specifications defined in the [HIP-1334](https://github.com/hiero-ledger/hiero-improvement-proposals/pull/1334).
+This implementation follows the specifications defined in the [HIP-1334](https://hips.hedera.com/#hip-1334).
 
 [View the interactive presentation](https://internetofpeers.org/hiero-message-box/presentation.html) to visualize the message box flow.
 
