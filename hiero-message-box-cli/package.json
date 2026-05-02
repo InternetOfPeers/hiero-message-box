@@ -1,0 +1,39 @@
+{
+  "name": "@internetofpeers/hiero-message-box-cli",
+  "version": "1.1.0",
+  "description": "CLI for the Hiero Message Box encrypted messaging system",
+  "license": "MIT",
+  "author": "Giuseppe Bertone <giuseppe.bertone@proton.me>",
+  "homepage": "https://github.com/InternetOfPeers/hiero-message-box",
+  "type": "commonjs",
+  "bin": {
+    "hmb": "./bin/hmb.js"
+  },
+  "scripts": {
+    "start": "node bin/hmb.js setup-message-box && sleep 5 && node bin/hmb.js listen-for-new-messages",
+    "test": "jest test/env-loader.test.js test/cli-dispatch.test.js",
+    "test:coverage": "jest --coverage",
+    "format": "prettier --write \"src/**/*.js\" \"bin/**/*.js\""
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 30000,
+    "detectOpenHandles": true,
+    "testMatch": [
+      "**/test/**/*.test.js"
+    ],
+    "setupFiles": [
+      "<rootDir>/test/setup.js"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "bin/**/*.js"
+    ]
+  },
+  "dependencies": {
+    "@internetofpeers/hiero-message-box": "*"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0"
+  }
+}

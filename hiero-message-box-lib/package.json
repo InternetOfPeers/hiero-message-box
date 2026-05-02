@@ -1,0 +1,40 @@
+{
+  "name": "@internetofpeers/hiero-message-box",
+  "version": "1.2.0",
+  "description": "Simple encrypted messaging system for Hedera accounts (isomorphic library)",
+  "license": "MIT",
+  "author": "Giuseppe Bertone <giuseppe.bertone@proton.me>",
+  "homepage": "https://github.com/InternetOfPeers/hiero-message-box",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest test/format-message.test.js test/format-message-with-crypto.test.js test/config.test.js && jest test/integration.test.js --runInBand",
+    "test:unit": "jest test/format-message.test.js test/format-message-with-crypto.test.js test/config.test.js",
+    "test:integration": "jest test/integration.test.js --runInBand",
+    "test:coverage": "jest --coverage",
+    "format": "prettier --write \"src/**/*.js\""
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 120000,
+    "detectOpenHandles": true,
+    "testMatch": [
+      "**/test/**/*.test.js"
+    ],
+    "reporters": [
+      "<rootDir>/test/streaming-reporter.js"
+    ],
+    "setupFiles": [
+      "<rootDir>/test/setup.js"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js"
+    ]
+  },
+  "dependencies": {
+    "@hiero-ledger/sdk": "^2.83.0"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0"
+  }
+}
