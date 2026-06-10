@@ -15,34 +15,6 @@ Supported encryption modes:
 | RSA-2048 + AES-256-CBC     | Generated PEM files    | Any (ED25519, SECP256K1) |
 | ECIES (ECDH + AES-256-GCM) | Derived from owner key | SECP256K1 only           |
 
-## Packages
-
-This is an **npm workspaces monorepo** with three packages:
-
-| Package  | Directory                                        | npm name                                 | Description                                                   |
-| -------- | ------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------- |
-| Library  | [hiero-message-box-lib/](hiero-message-box-lib/) | `@internetofpeers/hiero-message-box`     | Isomorphic (Node + browser), dependency-injected core library |
-| CLI      | [hiero-message-box-cli/](hiero-message-box-cli/) | `@internetofpeers/hiero-message-box-cli` | `hmb` command-line tool                                       |
-| Web demo | [hiero-message-box-web/](hiero-message-box-web/) | `@internetofpeers/hiero-message-box-web` | Vue 3 + Vite browser demo with WalletConnect                  |
-
-See each package's README for installation, configuration, and usage details.
-
-## Repository structure
-
-```text
-hiero-message-box/
-├── hiero-message-box-lib/      # Isomorphic library (@internetofpeers/hiero-message-box)
-├── hiero-message-box-cli/      # CLI tool (@internetofpeers/hiero-message-box-cli)
-├── hiero-message-box-web/      # Vue 3 web demo (@internetofpeers/hiero-message-box-web)
-├── specs/
-│   └── hip-1334.md             # HIP-1334 specification
-├── docs/
-│   └── presentation.html       # Interactive flow presentation
-├── package.json                # Workspaces root
-├── .prettierrc.json
-└── LICENSE
-```
-
 ## Quick start
 
 **Use the CLI:**
@@ -97,6 +69,34 @@ npm run test:coverage     # Coverage for all workspaces
 npm run test:coverage:lib # Coverage for the library
 npm run test:coverage:cli # Coverage for the CLI
 npm run format            # Format all code with Prettier
+```
+
+## Packages
+
+This is an **npm workspaces monorepo** with three packages:
+
+| Package  | Directory                                        | npm name                                 | Description                                                   |
+| -------- | ------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------- |
+| Library  | [hiero-message-box-lib/](hiero-message-box-lib/) | `@internetofpeers/hiero-message-box`     | Isomorphic (Node + browser), dependency-injected core library |
+| CLI      | [hiero-message-box-cli/](hiero-message-box-cli/) | `@internetofpeers/hiero-message-box-cli` | `hmb` command-line tool                                       |
+| Web demo | [hiero-message-box-web/](hiero-message-box-web/) | `@internetofpeers/hiero-message-box-web` | Vue 3 + Vite browser demo with WalletConnect                  |
+
+See each package's README for installation, configuration, and usage details.
+
+## Repository structure
+
+```text
+hiero-message-box/
+├── hiero-message-box-lib/      # Isomorphic library (@internetofpeers/hiero-message-box)
+├── hiero-message-box-cli/      # CLI tool (@internetofpeers/hiero-message-box-cli)
+├── hiero-message-box-web/      # Vue 3 web demo (@internetofpeers/hiero-message-box-web)
+├── specs/
+│   └── hip-1334.md             # HIP-1334 specification
+├── docs/
+│   └── presentation.html       # Interactive flow presentation
+├── package.json                # Workspaces root
+├── .prettierrc.json
+└── LICENSE
 ```
 
 ## License
